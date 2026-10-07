@@ -7,14 +7,15 @@ export class DeviceApi {
   constructor(private readonly service: DeviceService) {}
 
   async list(context: SecurityContext | null, userId: string): Promise<Response> {
-    try { requirePermission(context, "user:read"); return Response.json({ ok: true, value: await this.service.listForUser(userId) }); }
+    try { const ctx = requirePermission(context, "user:read"); if (ctx.principal.role === "MEMBER" && ctx.principal.userId !== userId) throw new Error("not_found"); return Response.json({ ok: true, value: await this.service.listForUser(userId) }); }
     catch (error) { return errorResponse(error, statusFor(error)); }
   }
 
   async create(context: SecurityContext | null, body: unknown): Promise<Response> {
     try {
-      requirePermission(context, "user:write");
+      const ctx = requirePermission(context, "user:write");
       if (!isCreateBody(body)) throw new Error("validation_failed");
+      if (ctx.principal.role === "MEMBER" && ctx.principal.userId !== body.userId) throw new Error("not_found");
       const value = await this.service.create({ ...body, now: new Date().toISOString() });
       return Response.json({ ok: true, value }, { status: 201 });
     } catch (error) { return errorResponse(error, statusFor(error)); }
@@ -22,8 +23,10 @@ export class DeviceApi {
 
   async updateStatus(context: SecurityContext | null, id: string, body: unknown): Promise<Response> {
     try {
-      requirePermission(context, "user:write");
+      const ctx = requirePermission(context, "user:write");
       if (!isStatusBody(body)) throw new Error("validation_failed");
+      const current = await this.service.listForUser(ctx.principal.userId).catch(() => []);
+      if (ctx.principal.role === "MEMBER" && !current.some(device => device.id === id)) throw new Error("not_found");
       const value = await this.service.updateStatus(id, body.status, new Date().toISOString());
       return Response.json({ ok: true, value });
     } catch (error) { return errorResponse(error, statusFor(error)); }
