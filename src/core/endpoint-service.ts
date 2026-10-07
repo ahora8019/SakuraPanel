@@ -44,10 +44,9 @@ export class EndpointService {
     const endpoint = await this.repository.findById(observation.endpointId);
     if (!endpoint) return { ok: false, error: "endpoint_not_found" };
 
-    const nextStatus = this.healthMonitor.observe(endpoint, observation);
-    const now = observation.observedAt;
     const previous = await this.repository.getHealth(endpoint.id);
-
+    const nextStatus = this.healthMonitor.observe(endpoint, { ...observation, previousConsecutiveFailures: previous?.consecutiveFailures ?? 0 });
+    const now = observation.observedAt;
     const state = observation.healthy
       ? {
           endpointId: endpoint.id,
