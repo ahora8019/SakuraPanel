@@ -1,7 +1,8 @@
-import { EndpointRegistry } from "./core/endpoint-registry";
 import { AuthService } from "./security/auth";
 import { authenticateRequest } from "./security/security-middleware";
 import { EndpointApi } from "./api/endpoint-api";
+import { EndpointService } from "./core/endpoint-service";
+import { D1EndpointRepository } from "./repositories/endpoint-repository";
 import { UserApi } from "./api/user-api";
 import { DeviceApi } from "./api/device-api";
 import { UserService } from "./core/user-service";
@@ -15,8 +16,6 @@ export interface Env {
   DB?: D1Database;
 }
 
-const registry = new EndpointRegistry();
-
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -25,10 +24,8 @@ export default {
       return Response.json({ ok: true, service: "sakurapanel" });
     }
 
-    if (!env.DB) {
-      if (url.pathname.startsWith("/internal/")) {
-        return Response.json({ ok: false, error: "database_not_configured" }, { status: 503 });
-      }
+    if (!env.DB && url.pathname.startsWith("/internal/")) {
+      return Response.json({ ok: false, error: "database_not_configured" }, { status: 503 });
     }
 
     if (!env.AUTH_SECRET) {
@@ -37,21 +34,31 @@ export default {
 
     const auth = new AuthService(env.AUTH_SECRET);
     const context = await authenticateRequest(request, auth, env.DB);
-    const endpointApi = new EndpointApi(registry);
+    const endpointService = new EndpointService(new D1EndpointRepository(env.DB!));
+    const endpointApi = new EndpointApi(endpointService);
 
     if (url.pathname === "/internal/endpoints") {
-      if (request.method === "GET") return endpointApi.list(context);
+      if (request.method === "GET") {
+        return endpointApi.list(context, url.searchParams.get("region") ?? undefined);
+      }
 
       if (request.method === "POST") {
         let endpoint: Endpoint;
-        try { endpoint = await request.json<Endpoint>(); }
-        catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+        try {
+          endpoint = await request.json<Endpoint>();
+        } catch {
+          return Response.json({ ok: false, error: "invalid_json" }, { status: 400 });
+        }
         return endpointApi.create(context, endpoint);
       }
     }
 
-    const userService = new UserService(new D1UserRepository(env.DB!));
-    const deviceService = new DeviceService(new D1DeviceRepository(env.DB!), new D1UserRepository(env.DB!));
+    const userRepository = new D1UserRepository(env.DB!);
+    const userService = new UserService(userRepository);
+    const deviceService = new DeviceService(
+      new D1DeviceRepository(env.DB!),
+      userRepository
+    );
     const userApi = new UserApi(userService);
     const deviceApi = new DeviceApi(deviceService);
 
