@@ -5,12 +5,14 @@ import type { SubscriptionRepository } from "../repositories/subscription-reposi
 import type { ConfigRepository } from "../repositories/config-repository";
 import { EndpointService } from "./endpoint-service";
 import { FailoverEngine } from "./failover-engine";
+import { ConfigService } from "./config-service";
 
 export class SubscriptionService {
   constructor(
     private readonly repository: SubscriptionRepository,
     private readonly configs: ConfigRepository,
     private readonly endpoints: EndpointService,
+    private readonly configService: ConfigService,
     private readonly failover = new FailoverEngine()
   ) {}
 
@@ -37,6 +39,58 @@ export class SubscriptionService {
 
   async listByUserId(userId: string): Promise<Subscription[]> {
     return this.repository.listByUserId(userId);
+  }
+
+  async provision(
+    subscriptionId: string,
+    input: {
+      templateId: string;
+      region?: string;
+      maxEndpoints: number;
+      deviceId?: string;
+      expiresAt?: string;
+      allowDegraded?: boolean;
+    },
+    now = new Date().toISOString()
+  ): Promise<SubscriptionVersion> {
+    if (!Number.isInteger(input.maxEndpoints) || input.maxEndpoints < 1 || input.maxEndpoints > 20) {
+      throw new Error("validation_failed");
+    }
+
+    const subscription = await this.get(subscriptionId);
+    if (subscription.status !== "ACTIVE") throw new Error("subscription_not_active");
+    if (subscription.expiresAt && Date.parse(subscription.expiresAt) <= Date.parse(now)) {
+      throw new Error("subscription_expired");
+    }
+    if (input.expiresAt && Date.parse(input.expiresAt) <= Date.parse(now)) {
+      throw new Error("invalid_expiration");
+    }
+
+    const endpoints = await this.endpoints.select({
+      region: input.region,
+      maxEndpoints: input.maxEndpoints,
+      allowDegraded: input.allowDegraded === true
+    });
+    if (endpoints.length === 0) throw new Error("no_eligible_endpoint");
+
+    const configs = await this.configService.generateForEndpoints({
+      identity: { userId: subscription.userId, ...(input.deviceId ? { deviceId: input.deviceId } : {}) },
+      endpoints: endpoints.map(endpoint => endpoint.id),
+      templateId: input.templateId,
+      expiresAt: input.expiresAt ?? subscription.expiresAt,
+      now
+    });
+
+    const latest = await this.repository.getLatestVersion(subscriptionId);
+    const version: SubscriptionVersion = {
+      id: crypto.randomUUID(),
+      subscriptionId,
+      version: (latest?.version ?? 0) + 1,
+      configIds: configs.map(config => config.id),
+      createdAt: now
+    };
+    await this.repository.saveVersion(version);
+    return version;
   }
 
   async rebuildVersion(
