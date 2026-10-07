@@ -15,6 +15,9 @@ import { UserService } from "./core/user-service";
 import { DeviceService } from "./core/device-service";
 import { D1UserRepository } from "./repositories/user-repository";
 import { D1DeviceRepository } from "./repositories/device-repository";
+import { SubscriptionApi } from "./api/subscription-api";
+import { SubscriptionService } from "./core/subscription-service";
+import { D1SubscriptionRepository } from "./repositories/subscription-repository";
 import type { Endpoint } from "./models/endpoint";
 
 export interface Env {
@@ -47,6 +50,13 @@ export default {
     const templateApi = new TemplateApi(templateService);
     const configService = new ConfigService(new D1ConfigRepository(env.DB!), endpointService, templateRepository);
     const configApi = new ConfigApi(configService);
+    const subscriptionRepository = new D1SubscriptionRepository(env.DB!);
+    const subscriptionService = new SubscriptionService(
+      subscriptionRepository,
+      new D1ConfigRepository(env.DB!),
+      endpointService
+    );
+    const subscriptionApi = new SubscriptionApi(subscriptionService);
 
     if (url.pathname === "/internal/endpoints") {
       if (request.method === "GET") {
@@ -81,6 +91,35 @@ export default {
       try { body = await request.json(); }
       catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       return templateApi.updateStatus(context, decodeURIComponent(templateStatusMatch[1]), body);
+    }
+
+    if (url.pathname === "/internal/subscriptions" && request.method === "GET") {
+      return subscriptionApi.list(context, url.searchParams.get("userId") ?? undefined);
+    }
+
+    if (url.pathname === "/internal/subscriptions" && request.method === "POST") {
+      let body: unknown;
+      try { body = await request.json(); }
+      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return subscriptionApi.create(context, body);
+    }
+
+    const subscriptionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)$/);
+    if (subscriptionMatch && request.method === "GET") {
+      return subscriptionApi.get(context, decodeURIComponent(subscriptionMatch[1]));
+    }
+
+    const subscriptionRebuildMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/rebuild$/);
+    if (subscriptionRebuildMatch && request.method === "POST") {
+      return subscriptionApi.rebuild(context, decodeURIComponent(subscriptionRebuildMatch[1]));
+    }
+
+    const subscriptionStatusMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/status$/);
+    if (subscriptionStatusMatch && request.method === "PATCH") {
+      let body: unknown;
+      try { body = await request.json(); }
+      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return subscriptionApi.updateStatus(context, decodeURIComponent(subscriptionStatusMatch[1]), body);
     }
 
     if (url.pathname === "/internal/configs" && request.method === "GET") {
