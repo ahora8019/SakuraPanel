@@ -4,12 +4,14 @@ import { ConfigEngine } from "./config-engine";
 import { validateGeneratedConfig } from "./config-validation";
 import { EndpointService } from "./endpoint-service";
 import type { TemplateRepository } from "../repositories/template-repository";
+import type { DeviceRepository } from "../repositories/device-repository";
 
 export class ConfigService {
   constructor(
     private readonly configs: ConfigRepository,
     private readonly endpoints: EndpointService,
     private readonly templates: TemplateRepository,
+    private readonly devices?: DeviceRepository,
     private readonly engine = new ConfigEngine()
   ) {}
 
@@ -41,6 +43,14 @@ export class ConfigService {
       const endpoint = selected[0];
       if (!endpoint) throw new Error("no_eligible_endpoint");
       endpointResult = { ok: true, value: endpoint };
+    }
+
+    if (input.identity.deviceId) {
+      if (!this.devices) throw new Error("service_not_configured");
+      const device = await this.devices.findById(input.identity.deviceId);
+      if (!device || device.userId !== input.identity.userId || device.status !== "ACTIVE") {
+        throw new Error("device_not_owned");
+      }
     }
 
     const template = await this.templates.findById(input.templateId);
