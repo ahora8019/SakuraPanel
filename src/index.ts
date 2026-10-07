@@ -19,10 +19,12 @@ import { SubscriptionApi } from "./api/subscription-api";
 import { SubscriptionService } from "./core/subscription-service";
 import { D1SubscriptionRepository } from "./repositories/subscription-repository";
 import type { Endpoint } from "./models/endpoint";
+import { KvRateLimiter } from "./security/kv-rate-limit";
 
 export interface Env {
   AUTH_SECRET: string;
   DB?: D1Database;
+  RATE_LIMIT_KV?: KVNamespace;
 }
 
 export default {
@@ -35,6 +37,12 @@ export default {
 
     if (!env.DB && url.pathname.startsWith("/internal/")) {
       return Response.json({ ok: false, error: "database_not_configured" }, { status: 503 });
+    }
+
+    if (env.RATE_LIMIT_KV && url.pathname.startsWith("/internal/")) {
+      const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
+      const decision = await new KvRateLimiter(env.RATE_LIMIT_KV).check(clientKey, 120, 60_000);
+      if (!decision.allowed) return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), { status: 429, headers: { "content-type": "application/json", "retry-after": String(decision.retryAfterSeconds ?? 1) } });
     }
 
     if (!env.AUTH_SECRET) {
