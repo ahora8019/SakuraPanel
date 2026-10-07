@@ -15,15 +15,17 @@ export class ConfigService {
 
   async generate(input: {
     identity: ConfigIdentity;
-    endpointId: string;
+    endpointId?: string;
+    region?: string;
     templateId: string;
+    allowDegraded?: boolean;
     expiresAt?: string;
     now?: string;
   }): Promise<GeneratedConfig> {
     const endpointResult = await this.endpoints.get(input.endpointId);
     if (!endpointResult.ok) throw new Error(endpointResult.error);
 
-    const template = this.templates.get(input.templateId);
+    const template = this.templates.findById(input.templateId);
     if (!template) throw new Error("template_not_found");
 
     const config = this.engine.generate({
