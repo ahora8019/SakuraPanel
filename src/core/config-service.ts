@@ -11,8 +11,8 @@ export class ConfigService {
     private readonly configs: ConfigRepository,
     private readonly endpoints: EndpointService,
     private readonly templates: TemplateRepository,
-    private readonly devices?: DeviceRepository,
-    private readonly engine = new ConfigEngine()
+    private readonly engine = new ConfigEngine(),
+    private readonly devices?: DeviceRepository = new ConfigEngine()
   ) {}
 
   async generate(input: {
