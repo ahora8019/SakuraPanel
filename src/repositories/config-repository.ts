@@ -37,14 +37,14 @@ export class D1ConfigRepository implements ConfigRepository {
 
   async findById(id: string): Promise<GeneratedConfig | null> {
     const row = await this.db.prepare(
-      "SELECT c.id,c.user_id,c.device_id,c.endpoint_id,c.template_id,c.status,c.expires_at,c.created_at,c.updated_at,cv.version AS template_version,cv.payload FROM configs c LEFT JOIN config_versions cv ON cv.config_id=c.id AND cv.version=(SELECT MAX(v.version) FROM config_versions v WHERE v.config_id=c.id) WHERE c.id=?"
+      "SELECT c.id,c.user_id,c.device_id,c.endpoint_id,c.template_id,c.template_version,c.status,c.expires_at,c.created_at,c.updated_at,cv.version AS config_version,cv.payload FROM configs c LEFT JOIN config_versions cv ON cv.config_id=c.id AND cv.version=(SELECT MAX(v.version) FROM config_versions v WHERE v.config_id=c.id) WHERE c.id=?"
     ).bind(id).first<Record<string, unknown>>();
     return row ? mapConfig(row) : null;
   }
 
   async listByUserId(userId: string): Promise<GeneratedConfig[]> {
     const result = await this.db.prepare(
-      "SELECT c.id,c.user_id,c.device_id,c.endpoint_id,c.template_id,c.status,c.expires_at,c.created_at,c.updated_at,cv.version AS template_version,cv.payload FROM configs c LEFT JOIN config_versions cv ON cv.config_id=c.id AND cv.version=(SELECT MAX(v.version) FROM config_versions v WHERE v.config_id=c.id) WHERE c.user_id=? ORDER BY c.created_at DESC"
+      "SELECT c.id,c.user_id,c.device_id,c.endpoint_id,c.template_id,c.template_version,c.status,c.expires_at,c.created_at,c.updated_at,cv.version AS config_version,cv.payload FROM configs c LEFT JOIN config_versions cv ON cv.config_id=c.id AND cv.version=(SELECT MAX(v.version) FROM config_versions v WHERE v.config_id=c.id) WHERE c.user_id=? ORDER BY c.created_at DESC"
     ).bind(userId).all<Record<string, unknown>>();
     return result.results.map(mapConfig);
   }
@@ -55,7 +55,7 @@ export class D1ConfigRepository implements ConfigRepository {
       VALUES (?,?,?,?,?,?,?,?,?)`
     ).bind(
       config.id, config.userId, config.deviceId ?? null, config.endpointId,
-      config.templateId, config.status, config.expiresAt ?? null,
+      config.templateId, config.templateVersion, config.status, config.expiresAt ?? null,
       config.createdAt, config.createdAt
     ).run();
 
