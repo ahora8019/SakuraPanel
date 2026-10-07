@@ -33,7 +33,7 @@ export class ConfigService {
       endpoint: endpointResult.value,
       template,
       expiresAt: input.expiresAt,
-      now: input.now
+      now
     });
 
     const validation = validateGeneratedConfig(config);
