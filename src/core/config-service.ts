@@ -61,6 +61,28 @@ export class ConfigService {
     return config;
   }
 
+  async generateForEndpoints(input: {
+    identity: ConfigIdentity;
+    endpoints: string[];
+    templateId: string;
+    expiresAt?: string;
+    now?: string;
+  }): Promise<GeneratedConfig[]> {
+    if (input.endpoints.length < 1) throw new Error("no_eligible_endpoint");
+    const uniqueEndpointIds = [...new Set(input.endpoints)];
+    const generated: GeneratedConfig[] = [];
+    for (const endpointId of uniqueEndpointIds) {
+      generated.push(await this.generate({
+        identity: input.identity,
+        endpointId,
+        templateId: input.templateId,
+        expiresAt: input.expiresAt,
+        now: input.now
+      }));
+    }
+    return generated;
+  }
+
   async get(id: string): Promise<GeneratedConfig> {
     const config = await this.configs.findById(id);
     if (!config) throw new Error("not_found");
