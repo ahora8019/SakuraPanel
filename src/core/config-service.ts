@@ -3,13 +3,13 @@ import type { ConfigRepository } from "../repositories/config-repository";
 import { ConfigEngine } from "./config-engine";
 import { validateGeneratedConfig } from "./config-validation";
 import { EndpointService } from "./endpoint-service";
-import type { TemplateRegistry } from "../templates/registry";
+import type { TemplateRepository } from "../repositories/template-repository";
 
 export class ConfigService {
   constructor(
     private readonly configs: ConfigRepository,
     private readonly endpoints: EndpointService,
-    private readonly templates: TemplateRegistry,
+    private readonly templates: TemplateRepository,
     private readonly engine = new ConfigEngine()
   ) {}
 
