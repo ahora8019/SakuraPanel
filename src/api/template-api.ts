@@ -38,7 +38,8 @@ function isCreateBody(value: unknown): value is {
   const b = value as Record<string, unknown>;
   return typeof b.name === "string" && typeof b.protocol === "string" &&
     (b.version === undefined || typeof b.version === "number") &&
-    !!b.definition && typeof b.definition === "object" && !Array.isArray(b.definition);
+    !!b.definition && typeof b.definition === "object" && !Array.isArray(b.definition) &&
+    (b.status === undefined || b.status === "ACTIVE" || b.status === "DISABLED" || b.status === "RETIRED");
 }
 
 function isStatusBody(value: unknown): value is { status: ConfigTemplate["status"] } {
