@@ -5,6 +5,10 @@ import { EndpointService } from "./core/endpoint-service";
 import { D1EndpointRepository } from "./repositories/endpoint-repository";
 import { UserApi } from "./api/user-api";
 import { DeviceApi } from "./api/device-api";
+import { ConfigApi } from "./api/config-api";
+import { ConfigService } from "./core/config-service";
+import { D1ConfigRepository } from "./repositories/config-repository";
+import { TemplateRegistry } from "./templates/registry";
 import { UserService } from "./core/user-service";
 import { DeviceService } from "./core/device-service";
 import { D1UserRepository } from "./repositories/user-repository";
@@ -36,6 +40,8 @@ export default {
     const context = await authenticateRequest(request, auth, env.DB);
     const endpointService = new EndpointService(new D1EndpointRepository(env.DB!));
     const endpointApi = new EndpointApi(endpointService);
+    const configService = new ConfigService(new D1ConfigRepository(env.DB!), endpointService, new TemplateRegistry());
+    const configApi = new ConfigApi(configService);
 
     if (url.pathname === "/internal/endpoints") {
       if (request.method === "GET") {
@@ -53,6 +59,29 @@ export default {
       }
     }
 
+    if (url.pathname === "/internal/configs" && request.method === "GET") {
+      return configApi.list(context, url.searchParams.get("userId") ?? undefined);
+    }
+
+    if (url.pathname === "/internal/configs" && request.method === "POST") {
+      let body: unknown;
+      try { body = await request.json(); }
+      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return configApi.generate(context, body);
+    }
+
+    const configMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)$/);
+    if (configMatch && request.method === "GET") {
+      return configApi.get(context, decodeURIComponent(configMatch[1]));
+    }
+
+    const configStatusMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/status$/);
+    if (configStatusMatch && request.method === "PATCH") {
+      let body: unknown;
+      try { body = await request.json(); }
+      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return configApi.updateStatus(context, decodeURIComponent(configStatusMatch[1]), body);
+    }
     const userRepository = new D1UserRepository(env.DB!);
     const userService = new UserService(userRepository);
     const deviceService = new DeviceService(
