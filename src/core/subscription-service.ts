@@ -12,7 +12,7 @@ export class SubscriptionService {
     private readonly repository: SubscriptionRepository,
     private readonly configs: ConfigRepository,
     private readonly endpoints: EndpointService,
-    private readonly configService: ConfigService,
+    private readonly configService?: ConfigService,
     private readonly failover = new FailoverEngine()
   ) {}
 
@@ -72,6 +72,8 @@ export class SubscriptionService {
       allowDegraded: input.allowDegraded === true
     });
     if (endpoints.length === 0) throw new Error("no_eligible_endpoint");
+
+    if (!this.configService) throw new Error("service_not_configured");
 
     const configs = await this.configService.generateForEndpoints({
       identity: { userId: subscription.userId, ...(input.deviceId ? { deviceId: input.deviceId } : {}) },
