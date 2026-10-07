@@ -5,6 +5,8 @@ export interface AuthPrincipal {
   userId: string;
   role: Role;
   sessionId: string;
+  tokenVersion: number;
+  securityVersion: number;
   issuedAt: number;
   expiresAt: number;
 }
@@ -13,6 +15,8 @@ interface TokenPayload {
   sub: string;
   role: Role;
   sid: string;
+  tv: number;
+  sv: number;
   iat: number;
   exp: number;
 }
@@ -88,10 +92,21 @@ export class AuthService {
       throw new Error("invalid_token_ttl");
     }
 
+    if (
+      !Number.isInteger(principal.tokenVersion) ||
+      principal.tokenVersion < 1 ||
+      !Number.isInteger(principal.securityVersion) ||
+      principal.securityVersion < 1
+    ) {
+      throw new Error("invalid_session_version");
+    }
+
     const payload: TokenPayload = {
       sub: principal.userId,
       role: principal.role,
       sid: principal.sessionId,
+      tv: principal.tokenVersion,
+      sv: principal.securityVersion,
       iat: now,
       exp: now + ttlSeconds
     };
@@ -140,6 +155,10 @@ export class AuthService {
       typeof payload.sub !== "string" ||
       typeof payload.sid !== "string" ||
       !isRole(payload.role) ||
+      !Number.isInteger(payload.tv) ||
+      payload.tv < 1 ||
+      !Number.isInteger(payload.sv) ||
+      payload.sv < 1 ||
       !Number.isInteger(payload.iat) ||
       !Number.isInteger(payload.exp)
     ) {
@@ -156,6 +175,8 @@ export class AuthService {
       userId: payload.sub,
       role: payload.role,
       sessionId: payload.sid,
+      tokenVersion: payload.tv,
+      securityVersion: payload.sv,
       issuedAt: payload.iat,
       expiresAt: payload.exp
     };
@@ -165,7 +186,9 @@ export class AuthService {
     const value = request.headers.get("Authorization");
     if (!value) return null;
 
-    const [scheme, token] = value.split(" ");
-    return scheme?.toLowerCase() === "bearer" && token ? token : null;
+    const [scheme, token, ...extra] = value.trim().split(/\s+/);
+    return scheme?.toLowerCase() === "bearer" && token && extra.length === 0
+      ? token
+      : null;
   }
 }
