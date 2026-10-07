@@ -1,30 +1,18 @@
 import type { Endpoint } from "../models/endpoint";
-import { validateEndpoint } from "../core/validation-engine";
-import { EndpointRegistry } from "../core/endpoint-registry";
-import { requirePermission } from "../security/security-middleware";
-import type { SecurityContext } from "../security/security-middleware";
+import { EndpointService } from "../core/endpoint-service";
+import { requirePermission, type SecurityContext } from "../security/security-middleware";
 
 export class EndpointApi {
-  constructor(private readonly registry: EndpointRegistry) {}
+  constructor(private readonly service: EndpointService) {}
 
-  create(context: SecurityContext | null, endpoint: Endpoint): Response {
+  async create(context: SecurityContext | null, endpoint: Endpoint): Promise<Response> {
     try {
       requirePermission(context, "endpoint:write");
-
-      const validation = validateEndpoint(endpoint);
-      if (!validation.valid) {
-        return Response.json(
-          { ok: false, error: "validation_failed", details: validation.errors },
-          { status: 400 }
-        );
-      }
-
-      const result = this.registry.register(endpoint);
-
+      const result = await this.service.create(endpoint);
       if (!result.ok) {
-        return Response.json(result, { status: 409 });
+        const status = result.error === "endpoint_already_exists" ? 409 : 400;
+        return Response.json(result, { status });
       }
-
       return Response.json(result, { status: 201 });
     } catch (error) {
       const code = error instanceof Error ? error.message : "internal_error";
@@ -35,15 +23,12 @@ export class EndpointApi {
     }
   }
 
-  list(context: SecurityContext | null): Response {
+  async list(context: SecurityContext | null, region?: string): Promise<Response> {
     try {
       requirePermission(context, "endpoint:read");
-      return Response.json({ ok: true, value: this.registry.list() });
+      return Response.json({ ok: true, value: await this.service.list(region) });
     } catch {
-      return Response.json(
-        { ok: false, error: "unauthorized" },
-        { status: 401 }
-      );
+      return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
     }
   }
 }
