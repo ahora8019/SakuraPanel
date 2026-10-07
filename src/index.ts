@@ -20,11 +20,13 @@ import { SubscriptionService } from "./core/subscription-service";
 import { D1SubscriptionRepository } from "./repositories/subscription-repository";
 import type { Endpoint } from "./models/endpoint";
 import { KvRateLimiter } from "./security/kv-rate-limit";
+import { EmergencyLock } from "./security/emergency-lock";
 
 export interface Env {
   AUTH_SECRET: string;
   DB?: D1Database;
   RATE_LIMIT_KV?: KVNamespace;
+  SECURITY_KV?: KVNamespace;
 }
 
 export default {
@@ -43,6 +45,11 @@ export default {
       const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
       const decision = await new KvRateLimiter(env.RATE_LIMIT_KV).check(clientKey, 120, 60_000);
       if (!decision.allowed) return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), { status: 429, headers: { "content-type": "application/json", "retry-after": String(decision.retryAfterSeconds ?? 1) } });
+    }
+
+    if (env.SECURITY_KV) {
+      try { await new EmergencyLock(env.SECURITY_KV).assertUnlocked(); }
+      catch { return Response.json({ ok: false, error: "emergency_lock_active" }, { status: 503 }); }
     }
 
     if (!env.AUTH_SECRET) {
