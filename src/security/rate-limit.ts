@@ -1,12 +1,28 @@
 export interface RateLimitDecision {
   allowed: boolean;
   remaining: number;
+  retryAfterSeconds?: number;
 }
 
 export class RateLimiter {
   private readonly hits = new Map<string, { count: number; resetAt: number }>();
 
-  check(key: string, limit: number, windowMs: number, now = Date.now()): RateLimitDecision {
+  check(
+    key: string,
+    limit: number,
+    windowMs: number,
+    now = Date.now()
+  ): RateLimitDecision {
+    if (
+      !key ||
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      !Number.isFinite(windowMs) ||
+      windowMs <= 0
+    ) {
+      throw new Error("invalid_rate_limit_parameters");
+    }
+
     const current = this.hits.get(key);
 
     if (!current || current.resetAt <= now) {
@@ -15,7 +31,14 @@ export class RateLimiter {
     }
 
     if (current.count >= limit) {
-      return { allowed: false, remaining: 0 };
+      return {
+        allowed: false,
+        remaining: 0,
+        retryAfterSeconds: Math.max(
+          1,
+          Math.ceil((current.resetAt - now) / 1000)
+        )
+      };
     }
 
     current.count += 1;
