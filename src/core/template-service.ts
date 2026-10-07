@@ -33,6 +33,8 @@ export class TemplateService {
       throw new Error("validation_failed");
     }
 
+    if (input.status && !["ACTIVE", "DISABLED", "RETIRED"].includes(input.status)) throw new Error("validation_failed");
+
     const now = new Date().toISOString();
     const template: ConfigTemplate = {
       id: crypto.randomUUID(),
