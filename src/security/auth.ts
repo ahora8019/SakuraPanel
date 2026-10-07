@@ -1,4 +1,5 @@
 import type { Role } from "./roles";
+import { isRole } from "./roles";
 
 export interface AuthPrincipal {
   userId: string;
@@ -48,19 +49,24 @@ async function verifySignature(
   data: string,
   signature: string
 ): Promise<boolean> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["verify"]
-  );
-  return crypto.subtle.verify(
-    "HMAC",
-    key,
-    base64UrlDecode(signature),
-    encoder.encode(data)
-  );
+  try {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"]
+    );
+
+    return await crypto.subtle.verify(
+      "HMAC",
+      key,
+      base64UrlDecode(signature),
+      encoder.encode(data)
+    );
+  } catch {
+    return false;
+  }
 }
 
 export class AuthService {
@@ -90,17 +96,23 @@ export class AuthService {
       exp: now + ttlSeconds
     };
 
-    const header = base64UrlEncode(encoder.encode(JSON.stringify({
-      alg: "HS256",
-      typ: "SPAT",
-      iss: this.issuer
-    })));
+    const header = base64UrlEncode(
+      encoder.encode(JSON.stringify({
+        alg: "HS256",
+        typ: "SPAT",
+        iss: this.issuer
+      }))
+    );
     const body = base64UrlEncode(encoder.encode(JSON.stringify(payload)));
     const unsigned = header + "." + body;
+
     return unsigned + "." + await sign(this.secret, unsigned);
   }
 
-  async verifyToken(token: string, now = Math.floor(Date.now() / 1000)): Promise<AuthPrincipal | null> {
+  async verifyToken(
+    token: string,
+    now = Math.floor(Date.now() / 1000)
+  ): Promise<AuthPrincipal | null> {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
 
@@ -111,8 +123,12 @@ export class AuthService {
     let payload: TokenPayload;
 
     try {
-      parsedHeader = JSON.parse(new TextDecoder().decode(base64UrlDecode(header)));
-      payload = JSON.parse(new TextDecoder().decode(base64UrlDecode(body)));
+      parsedHeader = JSON.parse(
+        new TextDecoder().decode(base64UrlDecode(header))
+      );
+      payload = JSON.parse(
+        new TextDecoder().decode(base64UrlDecode(body))
+      );
     } catch {
       return null;
     }
@@ -123,6 +139,7 @@ export class AuthService {
       parsedHeader.iss !== this.issuer ||
       typeof payload.sub !== "string" ||
       typeof payload.sid !== "string" ||
+      !isRole(payload.role) ||
       !Number.isInteger(payload.iat) ||
       !Number.isInteger(payload.exp)
     ) {
@@ -130,7 +147,10 @@ export class AuthService {
     }
 
     if (payload.exp <= now || payload.iat > now + 60) return null;
-    if (!await verifySignature(this.secret, header + "." + body, signature)) return null;
+
+    if (!await verifySignature(this.secret, header + "." + body, signature)) {
+      return null;
+    }
 
     return {
       userId: payload.sub,
