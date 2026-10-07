@@ -48,7 +48,8 @@ export default {
     const templateRepository = new D1TemplateRepository(env.DB!);
     const templateService = new TemplateService(templateRepository);
     const templateApi = new TemplateApi(templateService);
-    const configService = new ConfigService(new D1ConfigRepository(env.DB!), endpointService, templateRepository);
+    const deviceRepository = new D1DeviceRepository(env.DB!);
+    const configService = new ConfigService(new D1ConfigRepository(env.DB!), endpointService, templateRepository, deviceRepository);
     const configApi = new ConfigApi(configService);
     const subscriptionRepository = new D1SubscriptionRepository(env.DB!);
     const subscriptionService = new SubscriptionService(
@@ -157,7 +158,7 @@ export default {
     const userRepository = new D1UserRepository(env.DB!);
     const userService = new UserService(userRepository);
     const deviceService = new DeviceService(
-      new D1DeviceRepository(env.DB!),
+      deviceRepository,
       userRepository
     );
     const userApi = new UserApi(userService);
