@@ -51,8 +51,8 @@ export class D1ConfigRepository implements ConfigRepository {
 
   async save(config: GeneratedConfig): Promise<void> {
     await this.db.prepare(`INSERT INTO configs
-      (id,user_id,device_id,endpoint_id,template_id,status,expires_at,created_at,updated_at)
-      VALUES (?,?,?,?,?,?,?,?,?)`
+      (id,user_id,device_id,endpoint_id,template_id,template_version,status,expires_at,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`
     ).bind(
       config.id, config.userId, config.deviceId ?? null, config.endpointId,
       config.templateId, config.templateVersion, config.status, config.expiresAt ?? null,
