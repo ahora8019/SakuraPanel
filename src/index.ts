@@ -54,7 +54,8 @@ export default {
     const subscriptionService = new SubscriptionService(
       subscriptionRepository,
       new D1ConfigRepository(env.DB!),
-      endpointService
+      endpointService,
+      configService
     );
     const subscriptionApi = new SubscriptionApi(subscriptionService);
 
@@ -107,6 +108,14 @@ export default {
     const subscriptionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)$/);
     if (subscriptionMatch && request.method === "GET") {
       return subscriptionApi.get(context, decodeURIComponent(subscriptionMatch[1]));
+    }
+
+    const subscriptionProvisionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/provision$/);
+    if (subscriptionProvisionMatch && request.method === "POST") {
+      let body: unknown;
+      try { body = await request.json(); }
+      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return subscriptionApi.provision(context, decodeURIComponent(subscriptionProvisionMatch[1]), body);
     }
 
     const subscriptionRebuildMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/rebuild$/);
