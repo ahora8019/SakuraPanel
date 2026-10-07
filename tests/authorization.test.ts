@@ -6,6 +6,8 @@ const member: AuthPrincipal = {
   userId: "u1",
   role: "MEMBER",
   sessionId: "s1",
+  tokenVersion: 1,
+  securityVersion: 1,
   issuedAt: 1000,
   expiresAt: 2000
 };
