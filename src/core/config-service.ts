@@ -22,10 +22,28 @@ export class ConfigService {
     expiresAt?: string;
     now?: string;
   }): Promise<GeneratedConfig> {
-    const endpointResult = await this.endpoints.get(input.endpointId);
-    if (!endpointResult.ok) throw new Error(endpointResult.error);
+    if (input.endpointId && input.region) throw new Error("conflicting_endpoint_selection");
+    const now = input.now ?? new Date().toISOString();
+    if (input.expiresAt && Date.parse(input.expiresAt) <= Date.parse(now)) {
+      throw new Error("invalid_expiration");
+    }
 
-    const template = this.templates.findById(input.templateId);
+    let endpointResult: Awaited<ReturnType<EndpointService["get"]>>;
+    if (input.endpointId) {
+      endpointResult = await this.endpoints.get(input.endpointId);
+      if (!endpointResult.ok) throw new Error(endpointResult.error);
+    } else {
+      const selected = await this.endpoints.select({
+        region: input.region,
+        maxEndpoints: 1,
+        allowDegraded: input.allowDegraded === true
+      });
+      const endpoint = selected[0];
+      if (!endpoint) throw new Error("no_eligible_endpoint");
+      endpointResult = { ok: true, value: endpoint };
+    }
+
+    const template = await this.templates.findById(input.templateId);
     if (!template) throw new Error("template_not_found");
 
     const config = this.engine.generate({
