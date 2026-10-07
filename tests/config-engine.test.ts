@@ -43,7 +43,9 @@ describe("ConfigEngine", () => {
 
     expect(config.userId).toBe("user-1");
     expect(config.endpointId).toBe("ep-1");
-    expect(config.payload.endpoint.host).toBe("example.invalid");
+    expect(config.payload).toMatchObject({
+      endpoint: { host: "example.invalid" }
+    });
     expect(validateGeneratedConfig(config).valid).toBe(true);
   });
 
