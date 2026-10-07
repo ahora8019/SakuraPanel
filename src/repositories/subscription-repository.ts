@@ -2,6 +2,9 @@ import type { Subscription, SubscriptionVersion } from "../models/subscription";
 
 export interface SubscriptionRepository {
   findById(id: string): Promise<Subscription | null>;
+  listByUserId(userId: string): Promise<Subscription[]>;
+  create(subscription: Subscription): Promise<void>;
+  updateStatus(id: string, status: Subscription["status"], updatedAt: string): Promise<boolean>;
   getLatestVersion(subscriptionId: string): Promise<SubscriptionVersion | null>;
   saveVersion(version: SubscriptionVersion): Promise<void>;
 }
@@ -44,6 +47,29 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
     ).bind(id).first<Record<string, unknown>>();
 
     return row ? mapSubscription(row) : null;
+  }
+
+  async listByUserId(userId: string): Promise<Subscription[]> {
+    const result = await this.db.prepare(
+      "SELECT id, user_id, status, expires_at, created_at, updated_at FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC"
+    ).bind(userId).all<Record<string, unknown>>();
+    return result.results.map(mapSubscription);
+  }
+
+  async create(subscription: Subscription): Promise<void> {
+    await this.db.prepare(
+      "INSERT INTO subscriptions (id,user_id,status,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?)"
+    ).bind(
+      subscription.id, subscription.userId, subscription.status,
+      subscription.expiresAt ?? null, subscription.createdAt, subscription.updatedAt
+    ).run();
+  }
+
+  async updateStatus(id: string, status: Subscription["status"], updatedAt: string): Promise<boolean> {
+    const result = await this.db.prepare(
+      "UPDATE subscriptions SET status=?, updated_at=? WHERE id=?"
+    ).bind(status, updatedAt, id).run();
+    return result.meta.changes > 0;
   }
 
   async getLatestVersion(subscriptionId: string): Promise<SubscriptionVersion | null> {
