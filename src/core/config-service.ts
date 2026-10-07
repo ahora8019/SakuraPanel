@@ -1,5 +1,4 @@
 import type { ConfigIdentity, GeneratedConfig } from "../models/config";
-import type { ConfigTemplate } from "../models/template";
 import type { ConfigRepository } from "../repositories/config-repository";
 import { ConfigEngine } from "./config-engine";
 import { validateGeneratedConfig } from "./config-validation";
