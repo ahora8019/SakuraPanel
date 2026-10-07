@@ -8,7 +8,9 @@ import { DeviceApi } from "./api/device-api";
 import { ConfigApi } from "./api/config-api";
 import { ConfigService } from "./core/config-service";
 import { D1ConfigRepository } from "./repositories/config-repository";
-import { TemplateRegistry } from "./templates/registry";
+import { TemplateApi } from "./api/template-api";
+import { TemplateService } from "./core/template-service";
+import { D1TemplateRepository } from "./repositories/template-repository";
 import { UserService } from "./core/user-service";
 import { DeviceService } from "./core/device-service";
 import { D1UserRepository } from "./repositories/user-repository";
@@ -40,7 +42,10 @@ export default {
     const context = await authenticateRequest(request, auth, env.DB);
     const endpointService = new EndpointService(new D1EndpointRepository(env.DB!));
     const endpointApi = new EndpointApi(endpointService);
-    const configService = new ConfigService(new D1ConfigRepository(env.DB!), endpointService, new TemplateRegistry());
+    const templateRepository = new D1TemplateRepository(env.DB!);
+    const templateService = new TemplateService(templateRepository);
+    const templateApi = new TemplateApi(templateService);
+    const configService = new ConfigService(new D1ConfigRepository(env.DB!), endpointService, templateRepository);
     const configApi = new ConfigApi(configService);
 
     if (url.pathname === "/internal/endpoints") {
@@ -57,6 +62,25 @@ export default {
         }
         return endpointApi.create(context, endpoint);
       }
+    }
+
+    if (url.pathname === "/internal/templates" && request.method === "GET") {
+      return templateApi.list(context);
+    }
+
+    if (url.pathname === "/internal/templates" && request.method === "POST") {
+      let body: unknown;
+      try { body = await request.json(); }
+      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return templateApi.create(context, body);
+    }
+
+    const templateStatusMatch = url.pathname.match(/^\/internal\/templates\/([^/]+)\/status$/);
+    if (templateStatusMatch && request.method === "PATCH") {
+      let body: unknown;
+      try { body = await request.json(); }
+      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return templateApi.updateStatus(context, decodeURIComponent(templateStatusMatch[1]), body);
     }
 
     if (url.pathname === "/internal/configs" && request.method === "GET") {
