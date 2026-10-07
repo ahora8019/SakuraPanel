@@ -33,6 +33,17 @@ export class SubscriptionApi {
     } catch (error) { return errorResponse(error, statusFor(error)); }
   }
 
+  async provision(context: SecurityContext | null, id: string, body: unknown): Promise<Response> {
+    try {
+      const ctx = requirePermission(context, "subscription:write");
+      const subscription = await this.service.get(id);
+      if (ctx.principal.role === "MEMBER" && subscription.userId !== ctx.principal.userId) throw new Error("not_found");
+      if (!isProvisionBody(body)) throw new Error("validation_failed");
+      const value = await this.service.provision(id, body);
+      return Response.json({ ok: true, value });
+    } catch (error) { return errorResponse(error, statusFor(error)); }
+  }
+
   async rebuild(context: SecurityContext | null, id: string): Promise<Response> {
     try {
       const ctx = requirePermission(context, "subscription:write");
@@ -52,6 +63,19 @@ export class SubscriptionApi {
       return Response.json({ ok: true, value: await this.service.updateStatus(id, body.status) });
     } catch (error) { return errorResponse(error, statusFor(error)); }
   }
+}
+
+function isProvisionBody(value: unknown): value is {
+  templateId: string; region?: string; maxEndpoints: number; deviceId?: string; expiresAt?: string; allowDegraded?: boolean;
+} {
+  if (!value || typeof value !== "object") return false;
+  const b = value as Record<string, unknown>;
+  return typeof b.templateId === "string" &&
+    typeof b.maxEndpoints === "number" &&
+    (b.region === undefined || typeof b.region === "string") &&
+    (b.deviceId === undefined || typeof b.deviceId === "string") &&
+    (b.expiresAt === undefined || typeof b.expiresAt === "string") &&
+    (b.allowDegraded === undefined || typeof b.allowDegraded === "boolean");
 }
 
 function isCreateBody(value: unknown): value is { userId: string; expiresAt?: string } {
