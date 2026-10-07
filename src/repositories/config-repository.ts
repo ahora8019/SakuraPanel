@@ -50,16 +50,22 @@ export class D1ConfigRepository implements ConfigRepository {
   }
 
   async save(config: GeneratedConfig): Promise<void> {
-    await this.db.prepare(`INSERT INTO configs
+    const insertConfig = this.db.prepare(`INSERT INTO configs
       (id,user_id,device_id,endpoint_id,template_id,template_version,status,expires_at,created_at,updated_at)
       VALUES (?,?,?,?,?,?,?,?,?,?)`
     ).bind(
       config.id, config.userId, config.deviceId ?? null, config.endpointId,
       config.templateId, config.templateVersion, config.status, config.expiresAt ?? null,
       config.createdAt, config.createdAt
-    ).run();
+    );
 
-    await this.saveVersion(config.id, 1, config.payload, config.createdAt);
+    const insertVersion = this.db.prepare(
+      "INSERT INTO config_versions (id,config_id,version,payload,created_at) VALUES (?,?,?,?,?)"
+    ).bind(
+      crypto.randomUUID(), config.id, 1, JSON.stringify(config.payload), config.createdAt
+    );
+
+    await this.db.batch([insertConfig, insertVersion]);
   }
 
   async updateStatus(id: string, status: ConfigStatus, updatedAt: string): Promise<boolean> {
