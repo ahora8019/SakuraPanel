@@ -88,6 +88,6 @@ function statusFor(error: unknown): number {
   if (code === "forbidden") return 403;
   if (code === "not_found" || code === "endpoint_not_found" || code === "template_not_found") return 404;
   if (code === "conflict") return 409;
-  if (code === "validation_failed" || code.includes("required") || code === "endpoint_not_eligible" || code === "no_eligible_endpoint" || code === "template_not_active" || code === "invalid_expiration" || code === "conflicting_endpoint_selection") return 400;
+  if (code === "validation_failed" || code.includes("required") || code === "endpoint_not_eligible" || code === "no_eligible_endpoint" || code === "template_not_active" || code === "invalid_expiration" || code === "conflicting_endpoint_selection" || code === "device_not_owned") return 400;
   return 500;
 }
