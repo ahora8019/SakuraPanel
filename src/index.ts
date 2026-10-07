@@ -6,6 +6,7 @@ import type { Endpoint } from "./models/endpoint";
 
 export interface Env {
   AUTH_SECRET: string;
+  DB?: D1Database;
 }
 
 const registry = new EndpointRegistry();
@@ -18,6 +19,13 @@ export default {
       return Response.json({ ok: true, service: "sakurapanel" });
     }
 
+    if (url.pathname === "/internal/endpoints" && !env.DB) {
+      return Response.json(
+        { ok: false, error: "database_not_configured" },
+        { status: 503 }
+      );
+    }
+
     if (!env.AUTH_SECRET) {
       return Response.json(
         { ok: false, error: "service_not_configured" },
@@ -26,7 +34,7 @@ export default {
     }
 
     const auth = new AuthService(env.AUTH_SECRET);
-    const context = await authenticateRequest(request, auth);
+    const context = await authenticateRequest(request, auth, env.DB);
     const endpointApi = new EndpointApi(registry);
 
     if (url.pathname === "/internal/endpoints") {
