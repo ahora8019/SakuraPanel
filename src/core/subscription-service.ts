@@ -1,4 +1,5 @@
 import type { GeneratedConfig } from "../models/config";
+import type { Endpoint } from "../models/endpoint";
 import type { Subscription, SubscriptionVersion } from "../models/subscription";
 import type { SubscriptionRepository } from "../repositories/subscription-repository";
 import type { ConfigRepository } from "../repositories/config-repository";
@@ -50,7 +51,7 @@ export class SubscriptionService {
 
     const configs = await this.configs.listByUserId(subscription.userId);
     const endpointIds = [...new Set(configs.map(config => config.endpointId))];
-    const endpoints = [];
+    const endpoints: Endpoint[] = [];
     for (const endpointId of endpointIds) {
       const result = await this.endpoints.get(endpointId);
       if (result.ok) endpoints.push(result.value);
