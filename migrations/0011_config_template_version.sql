@@ -1,0 +1,1 @@
+ALTER TABLE configs ADD COLUMN template_version INTEGER NOT NULL DEFAULT 1;
