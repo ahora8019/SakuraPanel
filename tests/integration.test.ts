@@ -85,6 +85,12 @@ describe("application integration flow", () => {
     expect(created.accessToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
     const subscription = created.subscription;
     expect(subscription.publicTokenHash).toBeTruthy();
+    const oldToken = created.accessToken;
+    const rotated = await subscriptionService.rotateAccessToken(subscription.id, "2026-01-01T00:00:30.000Z");
+    expect(rotated.accessToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(rotated.accessToken).not.toBe(oldToken);
+    expect(rotated.subscription.publicTokenHash).toBeTruthy();
+
     const v1 = await subscriptionService.provision(subscription.id, {
       templateId: "tpl-1"
     }, "2026-01-01T00:01:00.000Z");
