@@ -93,6 +93,72 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     }
 
 
+    // Phone-friendly OWNER dashboard. The session token is kept only in sessionStorage.
+    if (url.pathname === "/owner" && request.method === "GET") {
+      return new Response(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SakuraPanel Owner</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:720px;margin:0 auto;padding:24px;background:#111;color:#fff}
+.card{background:#1b1b1b;border:1px solid #333;border-radius:16px;padding:18px;margin:12px 0}
+input,button{width:100%;box-sizing:border-box;padding:14px;margin:7px 0;border-radius:10px;border:1px solid #555;background:#222;color:#fff}
+button{background:#e85d9e;border:0;font-weight:700}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{font-size:28px;font-weight:800}.muted{color:#aaa}
+pre{white-space:pre-wrap;word-break:break-word}
+</style></head><body>
+<h2>🌸 SakuraPanel Owner</h2>
+<section id="login" class="card">
+<p class="muted">Create a temporary Owner session. The credential is sent only over HTTPS and is not stored.</p>
+<input id="u" value="ahora_8019" autocomplete="username">
+<input id="s" type="password" placeholder="Bootstrap secret" autocomplete="off">
+<button id="go">Open Dashboard</button>
+<pre id="err"></pre>
+</section>
+<section id="app" hidden>
+<div class="card"><strong>OWNER</strong><div id="who" class="muted"></div></div>
+<div class="grid">
+<div class="card"><div id="users" class="stat">—</div><div class="muted">Users</div></div>
+<div class="card"><div id="endpoints" class="stat">—</div><div class="muted">Endpoints</div></div>
+<div class="card"><div id="templates" class="stat">—</div><div class="muted">Templates</div></div>
+</div>
+<div class="card"><button id="refresh">Refresh</button><button id="logout">Logout</button><pre id="out"></pre></div>
+</section>
+<script>
+const $=id=>document.getElementById(id);
+const tokenKey="sakurapanel_owner_token";
+async function api(path){
+ const t=sessionStorage.getItem(tokenKey);
+ const r=await fetch(path,{headers:{Authorization:"Bearer "+t}});
+ const j=await r.json();
+ if(!r.ok) throw new Error(j.error||("HTTP "+r.status));
+ return j;
+}
+async function load(){
+ const [u,e,t]=await Promise.all([api("/internal/users"),api("/internal/endpoints"),api("/internal/templates")]);
+ $("users").textContent=Array.isArray(u.value)?u.value.length:"?";
+ $("endpoints").textContent=Array.isArray(e.value)?e.value.length:"?";
+ $("templates").textContent=Array.isArray(t.value)?t.value.length:"?";
+ $("who").textContent="ahora_8019 • authenticated";
+ $("login").hidden=true;$("app").hidden=false;
+ $("out").textContent="";
+}
+$("go").onclick=async()=>{
+ $("err").textContent="Working...";
+ try{
+  const r=await fetch("/internal/bootstrap/session",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({username:$("u").value,bootstrapSecret:$("s").value})});
+  const j=await r.json();
+  if(!r.ok) throw new Error(j.error||("HTTP "+r.status));
+  sessionStorage.setItem(tokenKey,j.value.token);
+  $("s").value="";
+  await load();
+ }catch(e){$("err").textContent=String(e)}
+};
+$("refresh").onclick=()=>load().catch(e=>$("out").textContent=String(e));
+$("logout").onclick=()=>{sessionStorage.removeItem(tokenKey);location.reload()};
+if(sessionStorage.getItem(tokenKey)) load().catch(()=>sessionStorage.removeItem(tokenKey));
+</script></body></html>`, {headers:{"content-type":"text/html; charset=UTF-8","cache-control":"no-store"}});
+    }
+
     // One-time production bootstrap: creates the first OWNER only when the database has no users.
     // It uses a separate secret so AUTH_SECRET never doubles as a bootstrap credential.
     if (url.pathname === "/internal/bootstrap" && request.method === "POST") {
@@ -182,6 +248,61 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       }, { status: 201 });
     }
 
+
+    if (url.pathname === "/internal/bootstrap/session" && request.method === "POST") {
+      if (!env.BOOTSTRAP_SECRET) {
+        return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
+      }
+
+      let body: unknown;
+      try {
+        const contentType = request.headers.get("content-type") ?? "";
+        if (!contentType.includes("application/x-www-form-urlencoded")) {
+          return Response.json({ ok: false, error: "invalid_content_type" }, { status: 415 });
+        }
+        const form = await request.formData();
+        body = { username: form.get("username"), bootstrapSecret: form.get("bootstrapSecret") };
+      } catch {
+        return Response.json({ ok: false, error: "invalid_request" }, { status: 400 });
+      }
+
+      if (!body || typeof body !== "object" ||
+          typeof (body as Record<string, unknown>).username !== "string" ||
+          typeof (body as Record<string, unknown>).bootstrapSecret !== "string") {
+        return Response.json({ ok: false, error: "validation_failed" }, { status: 400 });
+      }
+
+      if ((body as Record<string, unknown>).bootstrapSecret !== env.BOOTSTRAP_SECRET) {
+        return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
+      }
+
+      const username = ((body as Record<string, unknown>).username as string).trim();
+      const owner = await env.DB!.prepare(
+        "SELECT id, username, role, status, security_version FROM users WHERE username = ? AND role = 'OWNER' LIMIT 1"
+      ).bind(username).first<{id:string;username:string;role:"OWNER";status:"ACTIVE";security_version:number}>();
+
+      if (!owner || owner.status !== "ACTIVE") {
+        return Response.json({ ok: false, error: "owner_not_available" }, { status: 403 });
+      }
+
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const expires = new Date(now.getTime() + 60 * 60 * 1000);
+      const sessionId = crypto.randomUUID();
+      const token = await auth.issueToken({
+        userId: owner.id,
+        role: "OWNER",
+        sessionId,
+        tokenVersion: 1,
+        securityVersion: owner.security_version
+      }, 3600, Math.floor(now.getTime() / 1000));
+
+      await env.DB!.prepare(
+        "INSERT INTO auth_sessions (id, user_id, token_version, created_at, expires_at, revoked_at, last_seen_at) VALUES (?, ?, ?, ?, ?, NULL, ?)"
+      ).bind(sessionId, owner.id, 1, nowIso, expires.toISOString(), nowIso).run();
+
+      return Response.json({ok:true,value:{user:{id:owner.id,username:owner.username,role:owner.role},session:{expiresAt:expires.toISOString()},token}}, {status:201});
+    }
 
     const context = await authenticateRequest(request, auth, env.DB);
     const endpointService = new EndpointService(new D1EndpointRepository(env.DB!));
