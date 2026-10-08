@@ -78,3 +78,30 @@ export async function runDiagnostics(env: Env, deep = true): Promise<Diagnostics
     };
   }
 }
+
+export interface ReadinessResult {
+  ok: boolean;
+  database: DiagnosticCheck;
+}
+
+export async function runReadiness(env: Env): Promise<ReadinessResult> {
+  if (!env.DB) {
+    return {
+      ok: false,
+      database: { status: "error", detail: "database_not_configured" }
+    };
+  }
+
+  try {
+    await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
+    return {
+      ok: true,
+      database: { status: "ok" }
+    };
+  } catch {
+    return {
+      ok: false,
+      database: { status: "error", detail: "database_check_failed" }
+    };
+  }
+}
