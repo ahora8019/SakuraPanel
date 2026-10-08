@@ -2,6 +2,7 @@
   "name": "sakurapanel",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-06",
+  "account_id": "ff120baa3a2ca57960995ddabf610e95",
   "triggers": {
     "crons": ["0 * * * *"]
   },
