@@ -1,6 +1,10 @@
 import type { Role } from "../security/roles";
 import type { UserStatus } from "../models/user";
 
+export interface UserRepository {
+  findById(id: string): Promise<UserRecord | null>;
+}
+
 export interface UserRecord {
   id: string;
   username: string;
@@ -11,7 +15,7 @@ export interface UserRecord {
   updated_at: string;
 }
 
-export class D1UserRepository {
+export class D1UserRepository implements UserRepository {
   constructor(private readonly db: D1Database) {}
 
   findById(id: string): Promise<UserRecord | null> {
