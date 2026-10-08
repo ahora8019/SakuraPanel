@@ -22,7 +22,7 @@ No VPS/endpoint architecture is planned for the current Cloudflare-native editio
 - Subscription Delivery Engine hardening
 - Subscription self-diagnostics
 - Subscription diagnostics API and automated integrity tests
-- Client Compatibility Matrix
+- Client Compatibility Matrix (metadata model + validation + compatibility evaluator)
 - Request IDs and structured logs
 - Production health/readiness checks
 - Audit Timeline
@@ -98,11 +98,10 @@ Already implemented or substantially present:
 - Production deployment through GitHub Actions
 
 Next implementation batch:
-1. Client compatibility metadata
-2. Audit timeline API
-3. Backup/restore runbook
-4. Preview environment
-5. Final dashboard and subscription UI
+1. Audit timeline API
+2. Backup/restore runbook
+3. Preview environment
+4. Final dashboard and subscription UI
 
 ## Important operational rule
 
