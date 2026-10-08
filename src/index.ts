@@ -72,7 +72,9 @@ export default {
       subscriptionRepository,
       new D1ConfigRepository(env.DB!),
       endpointService,
-      configService
+      configService,
+      undefined,
+      userRepository
     );
     const subscriptionApi = new SubscriptionApi(subscriptionService);
 
