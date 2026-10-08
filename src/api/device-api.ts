@@ -23,7 +23,7 @@ export class DeviceApi {
 
   async updateStatus(context: SecurityContext | null, id: string, body: unknown): Promise<Response> {
     try {
-      const ctx = requirePermission(context, "user:write");
+      const ctx = requirePermission(context, "device:write");
       if (!isStatusBody(body)) throw new Error("validation_failed");
       const current = await this.service.listForUser(ctx.principal.userId).catch(() => []);
       if (ctx.principal.role === "MEMBER" && !current.some(device => device.id === id)) throw new Error("not_found");
