@@ -6,6 +6,7 @@ import type { ConfigRepository } from "../repositories/config-repository";
 import { EndpointService } from "./endpoint-service";
 import { FailoverEngine } from "./failover-engine";
 import { ConfigService } from "./config-service";
+import type { UserRepository } from "../repositories/user-repository";
 
 export class SubscriptionService {
   constructor(
@@ -13,11 +14,16 @@ export class SubscriptionService {
     private readonly configs: ConfigRepository,
     private readonly endpoints: EndpointService,
     private readonly configService?: ConfigService,
-    private readonly failover = new FailoverEngine()
+    private readonly failover = new FailoverEngine(),
+    private readonly users?: UserRepository
   ) {}
 
   async create(userId: string, expiresAt?: string, now = new Date().toISOString()): Promise<Subscription> {
     if (!userId) throw new Error("validation_failed");
+    if (this.users) {
+      const user = await this.users.findById(userId);
+      if (!user || user.status !== "ACTIVE") throw new Error("user_not_active");
+    }
     if (expiresAt && Date.parse(expiresAt) <= Date.parse(now)) throw new Error("invalid_expiration");
     const subscription: Subscription = {
       id: crypto.randomUUID(),
@@ -83,7 +89,7 @@ export class SubscriptionService {
       now
     });
 
-    const latest = await this.repository.getLatestVersion(subscriptionId);
+    const latestForVersion = latest;
     const version: SubscriptionVersion = {
       id: crypto.randomUUID(),
       subscriptionId,
@@ -105,7 +111,15 @@ export class SubscriptionService {
       throw new Error("subscription_expired");
     }
 
-    const configs = await this.configs.listByUserId(subscription.userId);
+    const latest = await this.repository.getLatestVersion(subscriptionId);
+    if (!latest || latest.configIds.length === 0) throw new Error("no_eligible_configs");
+
+    const configs: GeneratedConfig[] = [];
+    for (const configId of latest.configIds) {
+      const config = await this.configs.findById(configId);
+      if (config && config.userId === subscription.userId) configs.push(config);
+    }
+
     const endpointIds = [...new Set(configs.map(config => config.endpointId))];
     const endpoints: Endpoint[] = [];
     for (const endpointId of endpointIds) {
