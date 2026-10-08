@@ -1,4 +1,5 @@
 import type { GeneratedConfig } from "../models/config";
+import { validateCompatibilityMetadata } from "./config-compatibility";
 
 export interface ConfigValidationResult {
   valid: boolean;
@@ -16,6 +17,10 @@ export function validateGeneratedConfig(config: GeneratedConfig): ConfigValidati
 
   if (config.expiresAt && Number.isNaN(Date.parse(config.expiresAt))) {
     errors.push("invalid_expiration");
+  }
+
+  if (config.payload && typeof config.payload === "object") {
+    errors.push(...validateCompatibilityMetadata(config.payload.compatibility));
   }
 
   return { valid: errors.length === 0, errors };
