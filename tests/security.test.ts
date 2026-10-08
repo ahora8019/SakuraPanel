@@ -54,14 +54,9 @@ describe("security core", () => {
     expect(AuthService.extractBearer(oversized)).toBeNull();
   });
 
-  it("rejects tokens whose lifetime is outside the issued bounds", async () => {
+  it("rejects tokens whose requested lifetime exceeds the security bound", async () => {
     const auth = new AuthService("12345678901234567890123456789012");
-    const token = await auth.issueToken(principalBase, 3600, 1000);
-    const parts = token.split(".");
-    const payload = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - parts[1].length % 4) % 4)), c => c.charCodeAt(0))));
-    payload.exp = payload.iat + 86401;
-    const body = btoa(JSON.stringify(payload)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
-    expect(await auth.verifyToken(`${parts[0]}.${body}.${parts[2]}`, 1200)).toBeNull();
+    await expect(auth.issueToken(principalBase, 86401, 1000)).rejects.toThrow("invalid_token_ttl");
   });
 
   it("enforces RBAC", () => {
