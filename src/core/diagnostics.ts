@@ -6,6 +6,7 @@ const REQUIRED_TABLES = [
   "templates",
   "configs",
   "config_versions",
+  "config_releases",
   "subscriptions",
   "subscription_versions",
   "audit_logs",
