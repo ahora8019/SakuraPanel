@@ -37,6 +37,20 @@ export class SubscriptionApi {
     } catch (error) { return errorResponse(error, statusFor(error)); }
   }
 
+  async rotateToken(context: SecurityContext | null, id: string): Promise<Response> {
+    try {
+      const ctx = requirePermission(context, "subscription:write");
+      const subscription = await this.service.get(id);
+      if (ctx.principal.role === "MEMBER" && subscription.userId !== ctx.principal.userId) throw new Error("not_found");
+      const result = await this.service.rotateAccessToken(id);
+      return Response.json({
+        ok: true,
+        value: result.subscription,
+        accessToken: result.accessToken
+      }, { headers: { "cache-control": "no-store" } });
+    } catch (error) { return errorResponse(error, statusFor(error)); }
+  }
+
   async provision(context: SecurityContext | null, id: string, body: unknown): Promise<Response> {
     try {
       const ctx = requirePermission(context, "subscription:write");
