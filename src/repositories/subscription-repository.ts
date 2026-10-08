@@ -6,6 +6,7 @@ export interface SubscriptionRepository {
   listByUserId(userId: string): Promise<Subscription[]>;
   create(subscription: Subscription): Promise<void>;
   updateStatus(id: string, status: Subscription["status"], updatedAt: string): Promise<boolean>;
+  updatePublicTokenHash(id: string, tokenHash: string, updatedAt: string): Promise<boolean>;
   getLatestVersion(subscriptionId: string): Promise<SubscriptionVersion | null>;
   saveVersion(version: SubscriptionVersion): Promise<void>;
 }
@@ -78,6 +79,13 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
     const result = await this.db.prepare(
       "UPDATE subscriptions SET status=?, updated_at=? WHERE id=?"
     ).bind(status, updatedAt, id).run();
+    return result.meta.changes > 0;
+  }
+
+  async updatePublicTokenHash(id: string, tokenHash: string, updatedAt: string): Promise<boolean> {
+    const result = await this.db.prepare(
+      "UPDATE subscriptions SET public_token_hash=?, updated_at=? WHERE id=?"
+    ).bind(tokenHash, updatedAt, id).run();
     return result.meta.changes > 0;
   }
 
