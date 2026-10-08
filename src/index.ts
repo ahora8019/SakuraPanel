@@ -3,6 +3,7 @@ import { authenticateRequest } from "./security/security-middleware";
 import { UserApi } from "./api/user-api";
 import { DeviceApi } from "./api/device-api";
 import { ConfigApi } from "./api/config-api";
+import { ConfigReleaseApi } from "./api/config-release-api";
 import { ConfigService } from "./core/config-service";
 import { D1ConfigRepository } from "./repositories/config-repository";
 import { TemplateApi } from "./api/template-api";
@@ -24,6 +25,9 @@ import { ownerDashboardResponse } from "./ui/owner-dashboard";
 import { cleanupRateLimitBuckets } from "./security/rate-limit-cleanup";
 import { runDiagnostics, runReadiness } from "./core/diagnostics";
 import { DiagnosticsApi } from "./api/diagnostics-api";
+import { ConfigReleaseService } from "./core/config-release-service";
+import { D1ConfigReleaseRepository } from "./repositories/config-release-repository";
+import { D1AuditRepository } from "./repositories/audit-repository";
 
 import type { Env } from "./types/env";
 
@@ -351,6 +355,13 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     const deviceApi = new DeviceApi(deviceService);
     const templateApi = new TemplateApi(templateService);
     const configApi = new ConfigApi(configService);
+    const configReleaseService = new ConfigReleaseService(
+      configRepository,
+      new D1ConfigReleaseRepository(env.DB!),
+      userRepository,
+      new D1AuditRepository(env.DB!)
+    );
+    const configReleaseApi = new ConfigReleaseApi(configReleaseService);
     const subscriptionApi = new SubscriptionApi(subscriptionService);
     const diagnosticsApi = new DiagnosticsApi();
 
@@ -383,6 +394,27 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
 
     const configMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)$/);
     if (configMatch && request.method === "GET") return configApi.get(context, decodeURIComponent(configMatch[1]));
+
+    const configReleaseListMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/releases$/);
+    if (configReleaseListMatch && request.method === "GET") {
+      return configReleaseApi.list(context, decodeURIComponent(configReleaseListMatch[1]));
+    }
+
+    const configReleasePublishMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/releases\/publish$/);
+    if (configReleasePublishMatch && request.method === "POST") {
+      let body: unknown;
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      const version = body && typeof body === "object" ? Number((body as Record<string, unknown>).version) : NaN;
+      return configReleaseApi.publish(context, decodeURIComponent(configReleasePublishMatch[1]), version);
+    }
+
+    const configReleaseRollbackMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/releases\/rollback$/);
+    if (configReleaseRollbackMatch && request.method === "POST") {
+      let body: unknown;
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      const version = body && typeof body === "object" ? Number((body as Record<string, unknown>).version) : NaN;
+      return configReleaseApi.rollback(context, decodeURIComponent(configReleaseRollbackMatch[1]), version);
+    }
 
     const configStatusMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/status$/);
     if (configStatusMatch && request.method === "PATCH") {
