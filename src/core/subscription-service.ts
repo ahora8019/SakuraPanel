@@ -45,6 +45,7 @@ export class SubscriptionService {
 
   async rotateAccessToken(id: string, now = new Date().toISOString()): Promise<{ subscription: Subscription; accessToken: string }> {
     const subscription = await this.get(id);
+    if (subscription.status !== "ACTIVE") throw new Error("subscription_not_active");
     const nowMs = Date.parse(now);
     if (Number.isNaN(nowMs)) throw new Error("invalid_timestamp");
     if (subscription.expiresAt && Date.parse(subscription.expiresAt) <= nowMs) {
