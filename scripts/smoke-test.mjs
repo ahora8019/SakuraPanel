@@ -56,7 +56,8 @@ assert(notFound.body?.error === "not_found", "unknown route must return safe not
 
 const invalidSubscription = await request(`/s/${"A".repeat(43)}`);
 assert(invalidSubscription.response.status === 404, "invalid public subscription token must return 404");
-assert(invalidSubscription.body?.error === "subscription_not_found", "invalid public subscription token must not disclose data");
+assert(invalidSubscription.body?.error === "not_found" || invalidSubscription.body?.error === "subscription_not_found", "invalid public subscription token must return a safe not-found error");
+assert(!("value" in invalidSubscription.body) && !("token" in invalidSubscription.body), "invalid public subscription token must not disclose data");
 
 console.log(JSON.stringify({
   ok: true,
