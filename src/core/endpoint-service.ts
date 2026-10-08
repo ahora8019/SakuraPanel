@@ -12,6 +12,8 @@ export class EndpointService {
     private readonly selectionEngine = new SelectionEngine()
   ) {}
 
+  // SakuraPanel itself does not require an external server. Endpoints are
+  // optional infrastructure registered later when real VPS instances exist.
   async create(endpoint: Endpoint): Promise<ServiceResult<Endpoint>> {
     const validation = validateEndpoint(endpoint);
     if (!validation.valid) return { ok: false, error: validation.errors.join(",") };
@@ -20,6 +22,8 @@ export class EndpointService {
       return { ok: false, error: "endpoint_already_exists" };
     }
 
+    // A newly registered endpoint is not trusted for config generation until
+    // a health observation promotes it to an eligible state.
     const stored: Endpoint = { ...endpoint, status: "PROVISIONING" };
     await this.repository.save(stored);
     return { ok: true, value: stored };
