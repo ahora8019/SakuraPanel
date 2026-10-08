@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { SubscriptionDeliveryService } from "../src/core/subscription-delivery";
 import type { GeneratedConfig } from "../src/models/config";
 import type { Subscription, SubscriptionVersion } from "../src/models/subscription";
+import type { CompatibilityMatrixTarget } from "../src/models/config-compatibility";
 import type { ConfigRepository } from "../src/repositories/config-repository";
 import type { SubscriptionRepository } from "../src/repositories/subscription-repository";
 import { generateSubscriptionToken, hashSubscriptionToken } from "../src/core/subscription-token";
@@ -85,4 +86,44 @@ describe("subscription public delivery", () => {
 
     await expect(service.getSnapshot("invalid-token", "2026-01-01T00:01:00.000Z")).rejects.toThrow("not_found");
   });
+  it("delivers only fully compatible configs when a target is requested", async () => {
+    const token = generateSubscriptionToken();
+    const hash = await hashSubscriptionToken(token);
+    const subscription: Subscription = {
+      id: "sub-2", userId: "user-1", status: "ACTIVE", publicTokenHash: hash,
+      createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z"
+    };
+    const compatibility = { platform: "ANDROID", protocol: "VLESS", clients: ["v2rayNG"], features: ["TCP", "TLS"] };
+    const configs: GeneratedConfig[] = [
+      { id: "compatible", userId: "user-1", templateId: "tpl", templateVersion: 1, payload: { compatibility }, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "wrong-platform", userId: "user-1", templateId: "tpl", templateVersion: 1, payload: { compatibility: { ...compatibility, platform: "IOS" } }, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z" },
+      { id: "unknown", userId: "user-1", templateId: "tpl", templateVersion: 1, payload: {}, status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z" }
+    ];
+    const version: SubscriptionVersion = { id: "v2", subscriptionId: "sub-2", version: 2, configIds: ["wrong-platform", "compatible", "unknown"], createdAt: "2026-01-01T00:00:00.000Z" };
+    const target: CompatibilityMatrixTarget = { platform: "ANDROID", protocol: "VLESS", clients: ["v2rayNG"], features: ["TCP", "TLS"] };
+    const service = new SubscriptionDeliveryService(new MemorySubscriptionRepository(subscription, version), new MemoryConfigRepository(configs));
+
+    const snapshot = await service.getSnapshot(token, "2026-01-01T00:01:00.000Z", target);
+    expect(snapshot.configs.map(config => config.id)).toEqual(["compatible"]);
+  });
+
+  it("fails closed when compatibility filtering leaves no deliverable config", async () => {
+    const token = generateSubscriptionToken();
+    const hash = await hashSubscriptionToken(token);
+    const subscription: Subscription = {
+      id: "sub-3", userId: "user-1", status: "ACTIVE", publicTokenHash: hash,
+      createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z"
+    };
+    const config: GeneratedConfig = {
+      id: "incompatible", userId: "user-1", templateId: "tpl", templateVersion: 1,
+      payload: { compatibility: { platform: "IOS", protocol: "VLESS", clients: ["v2rayNG"] } },
+      status: "ACTIVE", createdAt: "2026-01-01T00:00:00.000Z"
+    };
+    const version: SubscriptionVersion = { id: "v3", subscriptionId: "sub-3", version: 3, configIds: [config.id], createdAt: "2026-01-01T00:00:00.000Z" };
+    const target: CompatibilityMatrixTarget = { platform: "ANDROID", protocol: "VLESS", clients: ["v2rayNG"] };
+    const service = new SubscriptionDeliveryService(new MemorySubscriptionRepository(subscription, version), new MemoryConfigRepository([config]));
+
+    await expect(service.getSnapshot(token, "2026-01-01T00:01:00.000Z", target)).rejects.toThrow("no_eligible_configs");
+  });
+
 });
