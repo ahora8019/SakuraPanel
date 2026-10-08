@@ -45,7 +45,7 @@ describe("subscription diagnostics",()=>{
  it("reports compatibility health for eligible configs",async()=>{
   const ver:SubscriptionVersion={id:"v1",subscriptionId:"s1",version:1,configIds:["c1"],createdAt:"2026-01-01T00:00:00.000Z"};
   const compatibility={platform:"ANDROID",protocol:"VLESS",clients:["v2rayNG"],features:["TCP","TLS"]};
-  const target={platform:"ANDROID" as const,protocol:"VLESS" as const,clients:["v2rayNG"],features:["TCP","TLS"] as const};
+  const target={platform:"ANDROID" as const,protocol:"VLESS" as const,clients:["v2rayNG"],features:["TCP","TLS"]};
   const d=await new SubscriptionDiagnosticsService(new S(sub,ver),new C([cfg("c1","ACTIVE","u1",compatibility)])).inspect("s1","2026-01-01T00:01:00.000Z",target);
   expect(d.status).toBe("healthy");
   expect(d.compatibility).toEqual({checked:1,compatible:1,partial:0,incompatible:0,unknown:0});
