@@ -1,6 +1,6 @@
 import { requirePermission, type SecurityContext } from "../security/security-middleware";
 import { runDiagnostics } from "../core/diagnostics";
-import type { Env } from "../index";
+import type { Env } from "../types/env";
 
 export class DiagnosticsApi {
   async get(context: SecurityContext | null, env: Env): Promise<Response> {
