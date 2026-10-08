@@ -3,6 +3,7 @@ import type { SubscriptionRepository } from "../repositories/subscription-reposi
 import type { ConfigRepository } from "../repositories/config-repository";
 import { ConfigService } from "./config-service";
 import type { UserRepository } from "../repositories/user-repository";
+import { generateSubscriptionToken, hashSubscriptionToken } from "./subscription-token";
 
 export class SubscriptionService {
   constructor(
@@ -12,7 +13,7 @@ export class SubscriptionService {
     private readonly users?: UserRepository
   ) {}
 
-  async create(userId: string, expiresAt?: string, now = new Date().toISOString()): Promise<Subscription> {
+  async create(userId: string, expiresAt?: string, now = new Date().toISOString()): Promise<{ subscription: Subscription; accessToken: string }> {
     if (!userId) throw new Error("validation_failed");
     if (this.users) {
       const user = await this.users.findById(userId);
@@ -26,17 +27,20 @@ export class SubscriptionService {
       if (Number.isNaN(expiresMs) || expiresMs <= nowMs) throw new Error("invalid_expiration");
     }
 
+    const accessToken = generateSubscriptionToken();
+    const publicTokenHash = await hashSubscriptionToken(accessToken);
     const subscription: Subscription = {
       id: crypto.randomUUID(),
       userId,
       status: "ACTIVE",
       ...(expiresAt ? { expiresAt } : {}),
+      publicTokenHash,
       createdAt: now,
       updatedAt: now
     };
 
     await this.repository.create(subscription);
-    return subscription;
+    return { subscription, accessToken };
   }
 
   async get(id: string): Promise<Subscription> {
