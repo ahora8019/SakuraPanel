@@ -33,8 +33,11 @@ export class ConfigService {
       if (!user || user.status !== "ACTIVE") throw new Error("user_not_active");
     }
     const now = input.now ?? new Date().toISOString();
-    if (input.expiresAt && Date.parse(input.expiresAt) <= Date.parse(now)) {
-      throw new Error("invalid_expiration");
+    const nowMs = Date.parse(now);
+    if (Number.isNaN(nowMs)) throw new Error("invalid_timestamp");
+    if (input.expiresAt) {
+      const expiresMs = Date.parse(input.expiresAt);
+      if (Number.isNaN(expiresMs) || expiresMs <= nowMs) throw new Error("invalid_expiration");
     }
 
     let endpointResult: Awaited<ReturnType<EndpointService["get"]>>;
