@@ -1,4 +1,4 @@
-import type { Env } from "../index";
+import type { Env } from "../types/env";
 
 const REQUIRED_TABLES = [
   "users",
