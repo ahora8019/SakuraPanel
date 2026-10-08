@@ -259,14 +259,22 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
         securityVersion: 1
       }, 3600, Math.floor(now.getTime() / 1000));
 
-      await env.DB!.batch([
-        env.DB!.prepare(
-          "INSERT INTO users (id, username, role, status, security_version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-        ).bind(userId, username, "OWNER", "ACTIVE", 1, nowIso, nowIso),
-        env.DB!.prepare(
-          "INSERT INTO auth_sessions (id, user_id, token_version, created_at, expires_at, revoked_at, last_seen_at) VALUES (?, ?, ?, ?, ?, NULL, ?)"
-        ).bind(sessionId, userId, 1, nowIso, expiresIso, nowIso)
-      ]);
+      try {
+        await env.DB!.batch([
+          env.DB!.prepare(
+            "INSERT INTO users (id, username, role, status, security_version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+          ).bind(userId, username, "OWNER", "ACTIVE", 1, nowIso, nowIso),
+          env.DB!.prepare(
+            "INSERT INTO auth_sessions (id, user_id, token_version, created_at, expires_at, revoked_at, last_seen_at) VALUES (?, ?, ?, ?, ?, NULL, ?)"
+          ).bind(sessionId, userId, 1, nowIso, expiresIso, nowIso)
+        ]);
+      } catch (error) {
+        const message = error instanceof Error ? error.message.toLowerCase() : "";
+        if (message.includes("unique") || message.includes("constraint")) {
+          return Response.json({ ok: false, error: "bootstrap_already_completed" }, { status: 409 });
+        }
+        throw error;
+      }
 
       return Response.json({
         ok: true,
