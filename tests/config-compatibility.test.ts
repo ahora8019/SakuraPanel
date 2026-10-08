@@ -1,11 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { evaluateCompatibility, validateCompatibilityMetadata } from "../src/core/config-compatibility";
+import {
+  evaluateCompatibility,
+  evaluateCompatibilityMatrix,
+  validateCompatibilityMetadata
+} from "../src/core/config-compatibility";
 import type { GeneratedConfig } from "../src/models/config";
 
 const config: GeneratedConfig = {
   id: "c1", userId: "u1", templateId: "t1", templateVersion: 1, status: "ACTIVE",
   createdAt: "2026-01-01T00:00:00.000Z",
-  payload: { compatibility: { platform: "ANDROID", protocol: "VLESS", clients: ["v2rayNG", "NekoBox"] } }
+  payload: {
+    compatibility: {
+      platform: "ANDROID",
+      protocol: "VLESS",
+      clients: ["v2rayNG", "NekoBox"],
+      features: ["TCP", "REALITY"]
+    }
+  }
 };
 
 describe("config compatibility", () => {
@@ -31,5 +42,25 @@ describe("config compatibility", () => {
     expect(validateCompatibilityMetadata({
       platform: "ANDROID", protocol: "VLESS", clients: ["v2rayNG"], notes: 123
     })).toContain("compatibility_notes_invalid");
+  });
+
+  it("marks unsupported features as partial instead of compatible", () => {
+    const result = evaluateCompatibilityMatrix(config, {
+      platform: "IOS",
+      protocol: "VLESS",
+      clients: ["Streisand"]
+    });
+    expect(result.entries[0]?.status).toBe("partial");
+    expect(result.entries[0]?.reasons).toContain("feature_unsupported");
+  });
+
+  it("does not treat unknown clients as compatible", () => {
+    const result = evaluateCompatibilityMatrix(config, {
+      platform: "ANDROID",
+      protocol: "VLESS",
+      clients: ["UnknownClient"]
+    });
+    expect(result.entries[0]?.status).toBe("unknown");
+    expect(result.entries[0]?.reasons).toContain("client_unknown");
   });
 });
