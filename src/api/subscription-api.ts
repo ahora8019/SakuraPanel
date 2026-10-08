@@ -66,16 +66,13 @@ export class SubscriptionApi {
 }
 
 function isProvisionBody(value: unknown): value is {
-  templateId: string; region?: string; maxEndpoints: number; deviceId?: string; expiresAt?: string; allowDegraded?: boolean;
+  templateId: string; deviceId?: string; expiresAt?: string;
 } {
   if (!value || typeof value !== "object") return false;
   const b = value as Record<string, unknown>;
   return typeof b.templateId === "string" &&
-    typeof b.maxEndpoints === "number" &&
-    (b.region === undefined || typeof b.region === "string") &&
     (b.deviceId === undefined || typeof b.deviceId === "string") &&
-    (b.expiresAt === undefined || typeof b.expiresAt === "string") &&
-    (b.allowDegraded === undefined || typeof b.allowDegraded === "boolean");
+    (b.expiresAt === undefined || typeof b.expiresAt === "string");
 }
 
 function isCreateBody(value: unknown): value is { userId: string; expiresAt?: string } {
@@ -93,8 +90,8 @@ function isStatusBody(value: unknown): value is { status: SubscriptionStatus } {
 function statusFor(error: unknown): number {
   const code = error instanceof Error ? error.message : "";
   if (code === "forbidden" || code === "user_not_active") return 403;
-  if (code === "not_found" || code === "subscription_not_found") return 404;
+  if (code === "not_found" || code === "subscription_not_found" || code === "template_not_found") return 404;
   if (code === "conflict") return 409;
-  if (code === "validation_failed" || code === "invalid_expiration" || code === "subscription_expired" || code === "subscription_not_active" || code === "no_eligible_configs") return 400;
+  if (code === "validation_failed" || code === "invalid_expiration" || code === "subscription_expired" || code === "subscription_not_active" || code === "no_eligible_configs" || code === "device_not_owned") return 400;
   return 500;
 }
