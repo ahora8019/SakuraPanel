@@ -144,6 +144,7 @@ async function load(){
 }
 $("refresh").onclick=()=>load().catch(e=>$("out").textContent=String(e));
 $("logout").onclick=()=>{document.cookie="sp_session=; Max-Age=0; Path=/;";location.reload()};
+load().catch(()=>{});
 </script></body></html>`, {headers:{"content-type":"text/html; charset=UTF-8","cache-control":"no-store"}});
     }
 
