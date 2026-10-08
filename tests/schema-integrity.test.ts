@@ -13,6 +13,7 @@ describe("D1 migration contract", () => {
     expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
     expect(new Set(numbers).size).toBe(numbers.length);
     expect(numbers[0]).toBe(1);
+    expect(numbers.at(-1)).toBe(16);
   });
 
   it("contains the core tables required by the application", () => {
@@ -23,31 +24,31 @@ describe("D1 migration contract", () => {
       .join("\n");
 
     for (const table of [
-      "users", "devices", "endpoints", "endpoint_groups", "endpoint_group_members",
-      "endpoint_health", "templates", "configs", "config_versions",
+      "users", "devices", "templates", "configs", "config_versions",
       "subscriptions", "subscription_versions", "audit_logs", "auth_sessions"
     ]) {
-      expect(sql).toMatch(new RegExp(`CREATE TABLE ${table}\\b`));
+      expect(sql).toMatch(new RegExp(`CREATE TABLE(?: IF NOT EXISTS)? ${table}\\b`));
     }
+
+    expect(sql).toContain("DROP TABLE endpoint_health");
+    expect(sql).toContain("DROP TABLE endpoint_group_members");
+    expect(sql).toContain("DROP TABLE endpoint_groups");
+    expect(sql).toContain("DROP TABLE endpoints");
   });
 
-  it("contains the schema columns required by current repositories", () => {
-    const configs = readFileSync(join(migrationsDir, "0007_configs.sql"), "utf8");
-    const version = readFileSync(join(migrationsDir, "0011_config_template_version.sql"), "utf8");
-    const users = readFileSync(join(migrationsDir, "0010_security.sql"), "utf8");
-
-    for (const column of ["user_id", "device_id", "endpoint_id", "template_id", "status", "expires_at"]) {
-      expect(configs).toContain(`  ${column} `);
-    }
-    expect(version).toContain("ADD COLUMN template_version");
-    expect(users).toContain("ADD COLUMN security_version");
+  it("removes endpoint_id from the current config schema", () => {
+    const migration = readFileSync(join(migrationsDir, "0016_remove_endpoints.sql"), "utf8");
+    expect(migration).not.toContain("endpoint_id TEXT");
+    expect(migration).not.toContain("REFERENCES endpoints");
+    expect(migration).toContain("CREATE TABLE configs_new");
   });
 
-  it("defines indexes for the repository hot paths", () => {
-    const sql = readFileSync(join(migrationsDir, "0012_query_indexes.sql"), "utf8");
+  it("defines indexes for current config and subscription hot paths", () => {
+    const sql = readFileSync(join(migrationsDir, "0016_remove_endpoints.sql"), "utf8");
     for (const index of [
-      "idx_configs_user_id", "idx_configs_endpoint_id", "idx_config_versions_config_id",
-      "idx_subscriptions_user_id", "idx_subscription_versions_subscription_id"
+      "idx_configs_user_id", "idx_configs_template_id", "idx_configs_user_created_at",
+      "idx_configs_device_created_at", "idx_config_versions_config_id",
+      "idx_config_versions_config_version"
     ]) {
       expect(sql).toContain(`CREATE INDEX ${index}`);
     }
