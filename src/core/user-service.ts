@@ -1,13 +1,14 @@
 import type { User, UserStatus } from "../models/user";
 import type { D1UserRepository, UserRecord } from "../repositories/user-repository";
-import { isRole, type Role } from "../security/roles";
+import { isRole, roleRank, type Role } from "../security/roles";
 
 export class UserService {
   constructor(private readonly users: D1UserRepository) {}
   async list(): Promise<User[]> { const result = await this.users.list(); return result.results.map(toUser); }
 
-  async create(input: { username: string; role: Role; now: string }): Promise<User> {
-    if (!isRole(input.role)) throw new Error("validation_failed");
+  async create(input: { username: string; role: Role; actorRole: Role; now: string }): Promise<User> {
+    if (!isRole(input.role) || !isRole(input.actorRole)) throw new Error("validation_failed");
+    if (input.actorRole !== "OWNER" && input.role !== "MEMBER") throw new Error("forbidden");
     const username = input.username.trim();
     if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)) throw new Error("validation_failed");
     if (await this.users.findByUsername(username)) throw new Error("conflict");
@@ -16,10 +17,11 @@ export class UserService {
     return toUser(user);
   }
 
-  async updateStatus(id: string, status: UserStatus, now: string): Promise<User> {
+  async updateStatus(id: string, status: UserStatus, actorRole: Role, now: string): Promise<User> {
     const current = await this.users.findById(id);
     if (!current) throw new Error("not_found");
-    if (!["ACTIVE", "SUSPENDED", "DISABLED"].includes(status)) throw new Error("validation_failed");
+    if (!isRole(actorRole) || !["ACTIVE", "SUSPENDED", "DISABLED"].includes(status)) throw new Error("validation_failed");
+    if (actorRole !== "OWNER" && roleRank(actorRole) <= roleRank(current.role)) throw new Error("forbidden");
     await this.users.updateStatus(id, status, now);
     const updated = await this.users.findById(id);
     if (!updated) throw new Error("not_found");
