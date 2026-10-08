@@ -37,7 +37,7 @@ export function sanitizeAuditMetadata(
 
   return Object.fromEntries(
     Object.entries(metadata).map(([key, value]) =>
-      SENSITIVE_KEYS.has(key) ? [key, "[redacted]"] : [key, value]
+      SENSITIVE_KEYS.has(key.toLowerCase()) ? [key, "[redacted]"] : [key, value]
     )
   );
 }
