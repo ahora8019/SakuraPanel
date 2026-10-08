@@ -64,6 +64,7 @@ export default {
     const templateService = new TemplateService(templateRepository);
     const templateApi = new TemplateApi(templateService);
     const deviceRepository = new D1DeviceRepository(env.DB!);
+    const userRepository = new D1UserRepository(env.DB!);
     const configService = new ConfigService(new D1ConfigRepository(env.DB!), endpointService, templateRepository, undefined, deviceRepository, userRepository);
     const configApi = new ConfigApi(configService);
     const subscriptionRepository = new D1SubscriptionRepository(env.DB!);
@@ -170,7 +171,6 @@ export default {
       catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       return configApi.updateStatus(context, decodeURIComponent(configStatusMatch[1]), body);
     }
-    const userRepository = new D1UserRepository(env.DB!);
     const userService = new UserService(userRepository);
     const deviceService = new DeviceService(
       deviceRepository,
