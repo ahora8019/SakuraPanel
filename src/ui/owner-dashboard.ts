@@ -32,7 +32,8 @@ pre{white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto}
 </div>
 
 <div class="card">
-<h2>1. Endpoint Registry</h2>
+<h2>1. Endpoint Registry — Optional Infrastructure</h2>
+<p class="muted">SakuraPanel runs on Cloudflare without any VPS. Add real endpoints here later when you purchase servers. Until then, this section can remain empty.</p>
 <form id="endpointForm">
 <div class="row">
 <input name="name" placeholder="Endpoint name" value="Endpoint-A" required>
@@ -67,6 +68,7 @@ pre{white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto}
 
 <div class="card">
 <h2>3. Config Engine</h2>
+<p class="muted">Config generation becomes active once at least one real, healthy endpoint is registered. No endpoint is required to run the panel itself.</p>
 <form id="configForm">
 <input name="endpointId" placeholder="Endpoint ID" required>
 <input name="templateId" placeholder="Template ID" required>
@@ -94,6 +96,7 @@ pre{white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto}
 
 <div class="card">
 <h2>5. Health & Failover</h2>
+<p class="muted">Health/failover is for future real VPS endpoints. The Cloudflare Worker is the control plane, not the endpoint server.</p>
 <p class="muted">Use Healthy once for a new endpoint. Three failures move it to DOWN; two consecutive recoveries move it back to HEALTHY.</p>
 <div id="healthList"></div>
 <form id="rebuildForm">
