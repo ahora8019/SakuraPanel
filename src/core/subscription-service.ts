@@ -25,6 +25,7 @@ export class SubscriptionService {
       if (!user || user.status !== "ACTIVE") throw new Error("user_not_active");
     }
     if (expiresAt && Date.parse(expiresAt) <= Date.parse(now)) throw new Error("invalid_expiration");
+
     const subscription: Subscription = {
       id: crypto.randomUUID(),
       userId,
@@ -33,6 +34,7 @@ export class SubscriptionService {
       createdAt: now,
       updatedAt: now
     };
+
     await this.repository.create(subscription);
     return subscription;
   }
@@ -82,14 +84,17 @@ export class SubscriptionService {
     if (!this.configService) throw new Error("service_not_configured");
 
     const configs = await this.configService.generateForEndpoints({
-      identity: { userId: subscription.userId, ...(input.deviceId ? { deviceId: input.deviceId } : {}) },
+      identity: {
+        userId: subscription.userId,
+        ...(input.deviceId ? { deviceId: input.deviceId } : {})
+      },
       endpoints: endpoints.map(endpoint => endpoint.id),
       templateId: input.templateId,
       expiresAt: input.expiresAt ?? subscription.expiresAt,
       now
     });
 
-    const latestForVersion = latest;
+    const latest = await this.repository.getLatestVersion(subscriptionId);
     const version: SubscriptionVersion = {
       id: crypto.randomUUID(),
       subscriptionId,
@@ -97,6 +102,7 @@ export class SubscriptionService {
       configIds: configs.map(config => config.id),
       createdAt: now
     };
+
     await this.repository.saveVersion(version);
     return version;
   }
@@ -132,11 +138,10 @@ export class SubscriptionService {
     );
     if (available.length === 0) throw new Error("no_eligible_configs");
 
-    const latest = await this.repository.getLatestVersion(subscriptionId);
     const version: SubscriptionVersion = {
       id: crypto.randomUUID(),
       subscriptionId,
-      version: (latest?.version ?? 0) + 1,
+      version: latest.version + 1,
       configIds: available.map(config => config.id),
       createdAt: now
     };
@@ -149,7 +154,11 @@ export class SubscriptionService {
     return this.repository.getLatestVersion(subscriptionId);
   }
 
-  async updateStatus(id: string, status: Subscription["status"], now = new Date().toISOString()): Promise<Subscription> {
+  async updateStatus(
+    id: string,
+    status: Subscription["status"],
+    now = new Date().toISOString()
+  ): Promise<Subscription> {
     if (!["ACTIVE", "EXPIRED", "REVOKED"].includes(status)) throw new Error("validation_failed");
     if (!(await this.repository.updateStatus(id, status, now))) throw new Error("subscription_not_found");
     return this.get(id);
