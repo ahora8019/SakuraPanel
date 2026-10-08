@@ -48,7 +48,8 @@ describe("config compatibility", () => {
     const result = evaluateCompatibilityMatrix(config, {
       platform: "IOS",
       protocol: "VLESS",
-      clients: ["Streisand"]
+      clients: ["Streisand"],
+      features: ["REALITY"]
     });
     expect(result.entries[0]?.status).toBe("partial");
     expect(result.entries[0]?.reasons).toContain("feature_unsupported");
