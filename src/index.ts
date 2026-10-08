@@ -3,6 +3,7 @@ import { authenticateRequest } from "./security/security-middleware";
 import { UserApi } from "./api/user-api";
 import { DeviceApi } from "./api/device-api";
 import { ConfigApi } from "./api/config-api";
+import { ConfigCompatibilityApi } from "./api/config-compatibility-api";
 import { ConfigReleaseApi } from "./api/config-release-api";
 import { ConfigService } from "./core/config-service";
 import { D1ConfigRepository } from "./repositories/config-repository";
@@ -358,6 +359,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     const deviceApi = new DeviceApi(deviceService);
     const templateApi = new TemplateApi(templateService);
     const configApi = new ConfigApi(configService);
+    const configCompatibilityApi = new ConfigCompatibilityApi(configService);
     const configReleaseService = new ConfigReleaseService(
       configRepository,
       new D1ConfigReleaseRepository(env.DB!),
@@ -401,6 +403,11 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       return configApi.generate(context, body);
+    }
+
+    const configCompatibilityMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/compatibility$/);
+    if (configCompatibilityMatch && request.method === "GET") {
+      return configCompatibilityApi.get(context, decodeURIComponent(configCompatibilityMatch[1]), url.searchParams);
     }
 
     const configMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)$/);
