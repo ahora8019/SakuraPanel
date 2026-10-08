@@ -198,6 +198,11 @@ export class AuthService {
     const cookie = request.headers.get("Cookie");
     if (!cookie) return null;
     const match = cookie.split(";").map(part => part.trim()).find(part => part.startsWith("sp_session="));
-    return match ? decodeURIComponent(match.slice("sp_session=".length)) : null;
+    if (!match) return null;
+    try {
+      return decodeURIComponent(match.slice("sp_session=".length));
+    } catch {
+      return null;
+    }
   }
 }
