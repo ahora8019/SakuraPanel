@@ -99,7 +99,6 @@ export class D1ConfigRepository implements ConfigRepository {
       "INSERT INTO config_versions (id,config_id,version,payload,created_at) VALUES (?,?,?,?,?)"
     ).bind(crypto.randomUUID(), configId, version, JSON.stringify(payload), createdAt).run();
   }
-  }
 
   async getVersionPayload(configId: string, version: number): Promise<Record<string, unknown> | null> {
     const row = await this.db.prepare(
