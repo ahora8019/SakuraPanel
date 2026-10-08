@@ -57,6 +57,78 @@ export default {
     }
 
     const auth = new AuthService(env.AUTH_SECRET);
+
+    // One-time production bootstrap: creates the first OWNER only when the database has no users.
+    // It is authenticated with AUTH_SECRET itself and becomes permanently unavailable after first use.
+    if (url.pathname === "/internal/bootstrap" && request.method === "POST") {
+      const bootstrapSecret = request.headers.get("X-Bootstrap-Secret");
+      if (!bootstrapSecret || bootstrapSecret !== env.AUTH_SECRET) {
+        return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
+      }
+
+      const existing = await env.DB!.prepare("SELECT COUNT(*) AS count FROM users").first<{ count: number }>();
+      if ((existing?.count ?? 0) > 0) {
+        return Response.json({ ok: false, error: "bootstrap_already_completed" }, { status: 409 });
+      }
+
+      let body: unknown;
+      try { body = await request.json(); }
+      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+
+      if (!body || typeof body !== "object" || typeof (body as Record<string, unknown>).username !== "string") {
+        return Response.json({ ok: false, error: "validation_failed" }, { status: 400 });
+      }
+
+      const username = ((body as Record<string, unknown>).username as string).trim();
+      if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)) {
+        return Response.json({ ok: false, error: "validation_failed" }, { status: 400 });
+      }
+
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const userId = crypto.randomUUID();
+      const sessionId = crypto.randomUUID();
+      const expires = new Date(now.getTime() + 60 * 60 * 1000);
+      const expiresIso = expires.toISOString();
+
+      const user = {
+        id: userId,
+        username,
+        role: "OWNER",
+        status: "ACTIVE",
+        securityVersion: 1,
+        createdAt: nowIso,
+        updatedAt: nowIso
+      };
+
+      const token = await auth.issueToken({
+        userId,
+        role: "OWNER",
+        sessionId,
+        tokenVersion: 1,
+        securityVersion: 1
+      }, 3600, Math.floor(now.getTime() / 1000));
+
+      await env.DB!.batch([
+        env.DB!.prepare(
+          "INSERT INTO users (id, username, role, status, security_version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        ).bind(userId, username, "OWNER", "ACTIVE", 1, nowIso, nowIso),
+        env.DB!.prepare(
+          "INSERT INTO auth_sessions (id, user_id, token_version, created_at, expires_at, revoked_at, last_seen_at) VALUES (?, ?, ?, ?, ?, NULL, ?)"
+        ).bind(sessionId, userId, 1, nowIso, expiresIso, nowIso)
+      ]);
+
+      return Response.json({
+        ok: true,
+        value: {
+          user,
+          session: { expiresAt: expiresIso },
+          token
+        }
+      }, { status: 201 });
+    }
+
+
     const context = await authenticateRequest(request, auth, env.DB);
     const endpointService = new EndpointService(new D1EndpointRepository(env.DB!));
     const endpointApi = new EndpointApi(endpointService);
