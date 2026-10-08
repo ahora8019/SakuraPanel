@@ -112,3 +112,5 @@ export class D1ConfigRepository implements ConfigRepository {
       return null;
     }
   }
+
+}
