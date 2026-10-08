@@ -24,7 +24,12 @@ export class SubscriptionService {
       const user = await this.users.findById(userId);
       if (!user || user.status !== "ACTIVE") throw new Error("user_not_active");
     }
-    if (expiresAt && Date.parse(expiresAt) <= Date.parse(now)) throw new Error("invalid_expiration");
+    const nowMs = Date.parse(now);
+    if (Number.isNaN(nowMs)) throw new Error("invalid_timestamp");
+    if (expiresAt) {
+      const expiresMs = Date.parse(expiresAt);
+      if (Number.isNaN(expiresMs) || expiresMs <= nowMs) throw new Error("invalid_expiration");
+    }
 
     const subscription: Subscription = {
       id: crypto.randomUUID(),
@@ -67,11 +72,13 @@ export class SubscriptionService {
 
     const subscription = await this.get(subscriptionId);
     if (subscription.status !== "ACTIVE") throw new Error("subscription_not_active");
-    if (subscription.expiresAt && Date.parse(subscription.expiresAt) <= Date.parse(now)) {
-      throw new Error("subscription_expired");
+    if (subscription.expiresAt) {
+      const expiresMs = Date.parse(subscription.expiresAt);
+      if (Number.isNaN(expiresMs) || expiresMs <= nowMs) throw new Error("subscription_expired");
     }
-    if (input.expiresAt && Date.parse(input.expiresAt) <= Date.parse(now)) {
-      throw new Error("invalid_expiration");
+    if (input.expiresAt) {
+      const expiresMs = Date.parse(input.expiresAt);
+      if (Number.isNaN(expiresMs) || expiresMs <= nowMs) throw new Error("invalid_expiration");
     }
 
     const endpoints = await this.endpoints.select({
@@ -114,8 +121,11 @@ export class SubscriptionService {
   ): Promise<SubscriptionVersion> {
     const subscription = await this.get(subscriptionId);
     if (subscription.status !== "ACTIVE") throw new Error("subscription_not_active");
-    if (subscription.expiresAt && Date.parse(subscription.expiresAt) <= Date.parse(now)) {
-      throw new Error("subscription_expired");
+    const nowMs = Date.parse(now);
+    if (Number.isNaN(nowMs)) throw new Error("invalid_timestamp");
+    if (subscription.expiresAt) {
+      const expiresMs = Date.parse(subscription.expiresAt);
+      if (Number.isNaN(expiresMs) || expiresMs <= nowMs) throw new Error("subscription_expired");
     }
 
     const latest = await this.repository.getLatestVersion(subscriptionId);
@@ -134,9 +144,11 @@ export class SubscriptionService {
       if (result.ok) endpoints.push(result.value);
     }
 
-    const available = this.failover.filterAvailable(configs, endpoints).filter(
-      config => !config.expiresAt || Date.parse(config.expiresAt) > Date.parse(now)
-    );
+    const available = this.failover.filterAvailable(configs, endpoints).filter(config => {
+      if (!config.expiresAt) return true;
+      const expiresMs = Date.parse(config.expiresAt);
+      return !Number.isNaN(expiresMs) && expiresMs > nowMs;
+    });
     if (available.length === 0) throw new Error("no_eligible_configs");
 
     const version: SubscriptionVersion = {
