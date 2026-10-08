@@ -45,14 +45,44 @@ describe("config compatibility", () => {
   });
 
   it("marks unsupported features as partial instead of compatible", () => {
-    const result = evaluateCompatibilityMatrix(config, {
+    const iosConfig: GeneratedConfig = {
+      ...config,
+      payload: {
+        compatibility: {
+          platform: "IOS",
+          protocol: "VLESS",
+          clients: ["Streisand"],
+          features: ["REALITY"]
+        }
+      }
+    };
+    const result = evaluateCompatibilityMatrix(iosConfig, {
       platform: "IOS",
       protocol: "VLESS",
-      clients: ["Streisand"],
-      features: ["REALITY"]
+      clients: ["Streisand"]
     });
     expect(result.entries[0]?.status).toBe("partial");
     expect(result.entries[0]?.reasons).toContain("feature_unsupported");
+  });
+
+  it("rejects a client that is not declared by the config", () => {
+    const result = evaluateCompatibilityMatrix(config, {
+      platform: "ANDROID",
+      protocol: "VLESS",
+      clients: ["Hiddify"]
+    });
+    expect(result.entries[0]?.status).toBe("incompatible");
+    expect(result.entries[0]?.reasons).toContain("client_not_declared");
+  });
+
+  it("rejects a target that does not match config metadata", () => {
+    const result = evaluateCompatibilityMatrix(config, {
+      platform: "IOS",
+      protocol: "VLESS",
+      clients: ["v2rayNG"]
+    });
+    expect(result.entries[0]?.status).toBe("incompatible");
+    expect(result.entries[0]?.reasons).toContain("platform_mismatch");
   });
 
   it("does not treat unknown clients as compatible", () => {
