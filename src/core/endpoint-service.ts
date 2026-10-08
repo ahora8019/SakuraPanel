@@ -20,8 +20,9 @@ export class EndpointService {
       return { ok: false, error: "endpoint_already_exists" };
     }
 
-    await this.repository.save(endpoint);
-    return { ok: true, value: endpoint };
+    const stored: Endpoint = { ...endpoint, status: "PROVISIONING" };
+    await this.repository.save(stored);
+    return { ok: true, value: stored };
   }
 
   async get(id: string): Promise<ServiceResult<Endpoint>> {
