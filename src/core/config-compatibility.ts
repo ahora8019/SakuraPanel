@@ -9,29 +9,25 @@ export interface CompatibilityResult {
   reasons: string[];
 }
 
-export function validateCompatibilityMetadata(value: unknown): string[] {
-  if (value === undefined) return [];
-  if (!value || typeof value !== "object" || Array.isArray(value)) return ["compatibility_metadata_invalid"];
+export function validateCompatibilityMetadata(metadata: unknown): string[] {
+  if (metadata === undefined) return [];
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return ["compatibility_metadata_invalid"];
 
-  const metadata = value as Record<string, unknown>;
+  const value = metadata as Record<string, unknown>;
   const errors: string[] = [];
+  if (!PLATFORMS.includes(value.platform as ClientPlatform)) errors.push("compatibility_platform_invalid");
+  if (!PROTOCOLS.includes(value.protocol as ClientProtocol)) errors.push("compatibility_protocol_invalid");
 
-  if (!PLATFORMS.includes(metadata.platform as ClientPlatform)) errors.push("compatibility_platform_invalid");
-  if (!PROTOCOLS.includes(metadata.protocol as ClientProtocol)) errors.push("compatibility_protocol_invalid");
-
-  if (!Array.isArray(metadata.clients) || metadata.clients.length > 32) {
+  if (!Array.isArray(value.clients) || value.clients.length === 0 || value.clients.length > 32) {
     errors.push("compatibility_clients_invalid");
-  } else if (metadata.clients.some(client => typeof client !== "string" || client.length < 1 || client.length > 64)) {
-    errors.push("compatibility_clients_invalid");
+  } else if (value.clients.some(client => typeof client !== "string" || !/^[A-Za-z0-9._ -]{1,64}$/.test(client))) {
+    errors.push("compatibility_client_name_invalid");
   }
 
-  if (metadata.minVersion !== undefined &&
-      (typeof metadata.minVersion !== "string" || metadata.minVersion.length < 1 || metadata.minVersion.length > 64)) {
+  if (value.minVersion !== undefined && (typeof value.minVersion !== "string" || value.minVersion.length === 0 || value.minVersion.length > 32)) {
     errors.push("compatibility_min_version_invalid");
   }
-
-  if (metadata.notes !== undefined &&
-      (typeof metadata.notes !== "string" || metadata.notes.length > 500)) {
+  if (value.notes !== undefined && (typeof value.notes !== "string" || value.notes.length > 500)) {
     errors.push("compatibility_notes_invalid");
   }
 
@@ -40,10 +36,8 @@ export function validateCompatibilityMetadata(value: unknown): string[] {
 
 export function evaluateCompatibility(config: GeneratedConfig, target: ConfigCompatibility): CompatibilityResult {
   const metadata = config.payload.compatibility;
-  const metadataErrors = validateCompatibilityMetadata(metadata);
-  if (metadataErrors.length > 0) {
-    return { compatible: false, reasons: metadataErrors };
-  }
+  const validationErrors = validateCompatibilityMetadata(metadata);
+  if (validationErrors.length > 0) return { compatible: false, reasons: validationErrors };
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     return { compatible: false, reasons: ["compatibility_metadata_missing"] };
   }
@@ -53,12 +47,8 @@ export function evaluateCompatibility(config: GeneratedConfig, target: ConfigCom
   if (value.protocol !== target.protocol) return { compatible: false, reasons: ["protocol_mismatch"] };
 
   if (target.clients.length > 0) {
-    const clients = Array.isArray(value.clients)
-      ? value.clients.filter((x): x is string => typeof x === "string")
-      : [];
-    if (!target.clients.some(client => clients.includes(client))) {
-      return { compatible: false, reasons: ["client_mismatch"] };
-    }
+    const clients = value.clients as string[];
+    if (!target.clients.some(client => clients.includes(client))) return { compatible: false, reasons: ["client_mismatch"] };
   }
 
   return { compatible: true, reasons: [] };
