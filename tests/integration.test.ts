@@ -46,6 +46,10 @@ class MemorySubscriptionRepository implements SubscriptionRepository {
     const subscription = this.subscriptions.get(id); if (!subscription) return false;
     this.subscriptions.set(id, { ...subscription, status, updatedAt }); return true;
   }
+  async updatePublicTokenHash(id: string, tokenHash: string, updatedAt: string) {
+    const subscription = this.subscriptions.get(id); if (!subscription) return false;
+    this.subscriptions.set(id, { ...subscription, publicTokenHash: tokenHash, updatedAt }); return true;
+  }
   async getLatestVersion(subscriptionId: string) { return (this.versions.get(subscriptionId) ?? []).at(-1) ?? null; }
   async saveVersion(version: SubscriptionVersion) {
     const versions = this.versions.get(version.subscriptionId) ?? [];
