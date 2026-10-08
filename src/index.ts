@@ -110,8 +110,8 @@ pre{white-space:pre-wrap;word-break:break-word}
 <section id="login" class="card">
 <form id="loginForm" method="post" action="/owner/login">
 <p class="muted">Create a temporary Owner session. The credential is sent only over HTTPS and is not stored.</p>
-<input id="u" value="ahora_8019" autocomplete="username">
-<input id="s" type="password" placeholder="Bootstrap secret" autocomplete="off">
+<input id="u" name="username" value="ahora_8019" autocomplete="username">
+<input id="s" name="bootstrapSecret" type="password" placeholder="Bootstrap secret" autocomplete="off">
 <button id="go" type="submit">Open Dashboard</button>
 </form>
 <pre id="err"></pre>
@@ -142,10 +142,6 @@ async function load(){
  $("login").hidden=true;$("app").hidden=false;
  $("out").textContent="";
 }
-$("go").onclick=()=>{
- $("err").textContent="Opening secure session...";
- $("loginForm").submit();
-};
 $("refresh").onclick=()=>load().catch(e=>$("out").textContent=String(e));
 $("logout").onclick=()=>{document.cookie="sp_session=; Max-Age=0; Path=/;";location.reload()};
 </script></body></html>`, {headers:{"content-type":"text/html; charset=UTF-8","cache-control":"no-store"}});
