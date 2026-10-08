@@ -113,4 +113,34 @@ describe("security core", () => {
     user.security_version = 2;
     expect(await service.validate(principal)).toBeNull();
   });
+  it("expires abuse scores after the decay window", () => {
+    const detector = new AbuseDetector(3, 100);
+    expect(detector.observe({ key: "ip:2", signal: "AUTH_FAILURE", at: 1000 }).score).toBe(1);
+    expect(detector.observe({ key: "ip:2", signal: "AUTH_FAILURE", at: 1050 }).score).toBe(2);
+    expect(detector.observe({ key: "ip:2", signal: "AUTH_FAILURE", at: 1101 }).score).toBe(1);
+  });
+
+  it("blocks exactly at the abuse threshold", () => {
+    const detector = new AbuseDetector(2);
+    expect(detector.observe({ key: "ip:3", signal: "AUTH_FAILURE", at: 1000 }).blocked).toBe(false);
+    expect(detector.observe({ key: "ip:3", signal: "RATE_LIMIT", at: 1001 }).blocked).toBe(true);
+  });
+
+  it("supports locking and unlocking through a KV-like store", async () => {
+    const values = new Map<string, string>();
+    const store = {
+      get: async (key: string) => values.get(key) ?? null,
+      put: async (key: string, value: string) => { values.set(key, value); },
+      delete: async (key: string) => { values.delete(key); }
+    };
+    const { EmergencyLock } = await import("../src/security/emergency-lock");
+    const lock = new EmergencyLock(store);
+    expect(await lock.isLocked()).toBe(false);
+    await lock.lock();
+    expect(await lock.isLocked()).toBe(true);
+    await expect(lock.assertUnlocked()).rejects.toThrow("emergency_lock_active");
+    await lock.unlock();
+    await expect(lock.assertUnlocked()).resolves.toBeUndefined();
+  });
+
 });
