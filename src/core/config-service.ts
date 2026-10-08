@@ -83,6 +83,7 @@ export class ConfigService {
     identity: ConfigIdentity;
     endpoints: string[];
     templateId: string;
+    allowDegraded?: boolean;
     expiresAt?: string;
     now?: string;
   }): Promise<GeneratedConfig[]> {
@@ -94,6 +95,7 @@ export class ConfigService {
         identity: input.identity,
         endpointId,
         templateId: input.templateId,
+        allowDegraded: input.allowDegraded,
         expiresAt: input.expiresAt,
         now: input.now
       }));
