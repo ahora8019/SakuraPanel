@@ -90,6 +90,7 @@ export class SubscriptionService {
       },
       endpoints: endpoints.map(endpoint => endpoint.id),
       templateId: input.templateId,
+      allowDegraded: input.allowDegraded === true,
       expiresAt: input.expiresAt ?? subscription.expiresAt,
       now
     });
