@@ -25,7 +25,7 @@ export class SubscriptionDeliveryService {
     now = new Date().toISOString(),
     compatibilityTarget?: CompatibilityMatrixTarget
   ): Promise<PublicSubscriptionSnapshot> {
-    if (!/^[A-Za-z0-9_-]{40,64}$/.test(token)) throw new Error("not_found");
+    if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("not_found");
 
     const tokenHash = await hashSubscriptionToken(token);
     const subscription = await this.subscriptions.findByPublicTokenHash(tokenHash);
