@@ -169,7 +169,13 @@ export class AuthService {
       return null;
     }
 
-    if (payload.exp <= now || payload.iat > now + 60) return null;
+    if (
+      payload.exp <= now ||
+      payload.iat > now + 60 ||
+      payload.exp <= payload.iat ||
+      payload.exp - payload.iat < 60 ||
+      payload.exp - payload.iat > 86400
+    ) return null;
 
     if (!await verifySignature(this.secret, header + "." + body, signature)) {
       return null;
@@ -197,10 +203,19 @@ export class AuthService {
 
     const cookie = request.headers.get("Cookie");
     if (!cookie) return null;
-    const match = cookie.split(";").map(part => part.trim()).find(part => part.startsWith("sp_session="));
-    if (!match) return null;
+
+    const matches = cookie
+      .split(";")
+      .map(part => part.trim())
+      .filter(part => part.startsWith("sp_session="));
+    if (matches.length !== 1) return null;
+
+    const raw = matches[0].slice("sp_session=".length);
+    if (!raw || raw.length > 4096) return null;
+
     try {
-      return decodeURIComponent(match.slice("sp_session=".length));
+      const token = decodeURIComponent(raw);
+      return token.length > 0 && token.length <= 4096 ? token : null;
     } catch {
       return null;
     }
