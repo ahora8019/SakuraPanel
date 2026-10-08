@@ -59,6 +59,40 @@ export default {
 
     const auth = new AuthService(env.AUTH_SECRET);
 
+    // Minimal HTTPS bootstrap UI for phone-only setup. It never puts the bootstrap
+    // credential in the URL and never sends it anywhere except the same Worker.
+    if (url.pathname === "/bootstrap" && request.method === "GET") {
+      return new Response(`<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SakuraPanel Bootstrap</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:520px;margin:40px auto;padding:20px;background:#111;color:#fff}
+input,button{width:100%;box-sizing:border-box;padding:14px;margin:8px 0;border-radius:10px;border:1px solid #555;background:#1d1d1d;color:#fff}
+button{background:#e85d9e;border:0;font-weight:700}pre{white-space:pre-wrap;word-break:break-word}
+</style></head><body>
+<h2>🌸 SakuraPanel Owner Bootstrap</h2>
+<p>Creates the first OWNER only. This page uses HTTPS and does not put the bootstrap secret in the URL.</p>
+<form id="f">
+<input id="u" value="ahora_8019" autocomplete="username" required>
+<input id="s" type="password" placeholder="Bootstrap secret" autocomplete="off" required>
+<button>Create OWNER</button>
+</form>
+<pre id="out"></pre>
+<script>
+document.getElementById("f").addEventListener("submit",async(e)=>{
+ e.preventDefault();
+ const out=document.getElementById("out"); out.textContent="Working...";
+ try{
+  const r=await fetch("/internal/bootstrap",{method:"POST",headers:{"Content-Type":"application/json","X-Bootstrap-Secret":document.getElementById("s").value},body:JSON.stringify({username:document.getElementById("u").value})});
+  const j=await r.json();
+  if(j?.value?.token) j.value.token="TOKEN_CREATED_IN_BROWSER_DO_NOT_SHARE";
+  out.textContent=JSON.stringify({status:r.status,...j},null,2);
+ }catch(err){out.textContent=String(err)}
+});
+</script></body></html>`, { headers: { "content-type": "text/html; charset=UTF-8", "cache-control": "no-store" } });
+    }
+
+
     // One-time production bootstrap: creates the first OWNER only when the database has no users.
     // It uses a separate secret so AUTH_SECRET never doubles as a bootstrap credential.
     if (url.pathname === "/internal/bootstrap" && request.method === "POST") {
