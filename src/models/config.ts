@@ -11,7 +11,6 @@ export interface GeneratedConfig {
   id: ID;
   userId: ID;
   deviceId?: ID;
-  endpointId: ID;
   templateId: ID;
   templateVersion: number;
   payload: Record<string, unknown>;
