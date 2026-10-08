@@ -100,7 +100,29 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       return ownerDashboardResponse();
     }
 
+    // Authentication/bootstrap endpoints are intentionally rate-limited more strictly than
+    // general internal APIs because they are credential-bearing entry points.
+    if (env.RATE_LIMIT_KV && (
+      (url.pathname === "/owner/login" && request.method === "POST") ||
+      (url.pathname === "/internal/bootstrap" && request.method === "POST") ||
+      (url.pathname === "/internal/bootstrap/session" && request.method === "POST")
+    )) {
+      const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
+      const decision = await new KvRateLimiter(env.RATE_LIMIT_KV).check(`auth:${clientKey}`, 10, 60_000);
+      if (!decision.allowed) {
+        return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), {
+          status: 429,
+          headers: {
+            "content-type": "application/json",
+            "retry-after": String(decision.retryAfterSeconds ?? 1),
+            "cache-control": "no-store"
+          }
+        });
+      }
+    }
+
     if (url.pathname === "/owner/logout" && request.method === "POST") {
+      if (!env.DB) return new Response("Service not configured", { status: 503, headers: { "cache-control": "no-store" } });
       const token = AuthService.extractBearer(request);
       if (token) {
         const principal = await auth.verifyToken(token);
@@ -117,7 +139,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     }
 
     if (url.pathname === "/owner/login" && request.method === "POST") {
-      if (!env.BOOTSTRAP_SECRET) {
+      if (!env.DB || !env.BOOTSTRAP_SECRET) {
         return new Response("Service not configured", { status: 503 });
       }
 
@@ -171,7 +193,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     // One-time production bootstrap: creates the first OWNER only when the database has no users.
     // It uses a separate secret so AUTH_SECRET never doubles as a bootstrap credential.
     if (url.pathname === "/internal/bootstrap" && request.method === "POST") {
-      if (!env.BOOTSTRAP_SECRET) {
+      if (!env.DB || !env.BOOTSTRAP_SECRET) {
         return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
       }
 
@@ -259,7 +281,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
 
 
     if (url.pathname === "/internal/bootstrap/session" && request.method === "POST") {
-      if (!env.BOOTSTRAP_SECRET) {
+      if (!env.DB || !env.BOOTSTRAP_SECRET) {
         return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
       }
 
