@@ -11,7 +11,7 @@ This document defines the production bindings and secrets required before the fi
 ## Required binding
 
 - `DB`: Cloudflare D1 database.
-  - Contains users, devices, endpoints, templates, configs, subscriptions, sessions, audit logs, and indexes.
+  - Contains users, devices, templates, configs, subscriptions, sessions, audit logs, and indexes. SakuraPanel does not require or manage external VPS endpoints.
   - Apply migrations in numeric order before enabling authenticated `/internal/*` routes.
 
 ## Optional bindings
@@ -31,6 +31,6 @@ The Worker intentionally fails closed for internal routes when `DB` is not confi
 6. Deploy the Worker.
 7. Verify `GET /health`.
 8. Verify authenticated HTTP flows against D1.
-9. Only then enable real endpoint/config provisioning.
+9. Config generation is available directly from templates and user/device identity; no external endpoint is required.
 
 Do not commit real database IDs, API tokens, private keys, or authentication secrets unless they are explicitly non-sensitive public identifiers.
