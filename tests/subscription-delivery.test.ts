@@ -13,6 +13,7 @@ class MemoryConfigRepository implements ConfigRepository {
   async listByIds(ids: string[]) { return ids.map(id => this.values.find(value => value.id === id)).filter((value): value is GeneratedConfig => Boolean(value)); }
   async save() {}
   async updateStatus() { return true; }
+  async updatePublicTokenHash() { return true; }
   async getLatestVersion() { return 1; }
   async saveVersion() {}
 }
