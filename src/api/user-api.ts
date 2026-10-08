@@ -16,16 +16,16 @@ export class UserApi {
     try {
       requirePermission(context, "user:write");
       if (!isCreateBody(body)) throw new Error("validation_failed");
-      const value = await this.service.create({ username: body.username, role: body.role, now: new Date().toISOString() });
+      const value = await this.service.create({ username: body.username, role: body.role, actorRole: ctx.principal.role, now: new Date().toISOString() });
       return Response.json({ ok: true, value }, { status: 201 });
     } catch (error) { return errorResponse(error, statusFor(error)); }
   }
 
   async updateStatus(context: SecurityContext | null, id: string, body: unknown): Promise<Response> {
     try {
-      requirePermission(context, "user:write");
+      const ctx = requirePermission(context, "user:write");
       if (!isStatusBody(body)) throw new Error("validation_failed");
-      const value = await this.service.updateStatus(id, body.status, new Date().toISOString());
+      const value = await this.service.updateStatus(id, body.status, ctx.principal.role, new Date().toISOString());
       return Response.json({ ok: true, value });
     } catch (error) { return errorResponse(error, statusFor(error)); }
   }
