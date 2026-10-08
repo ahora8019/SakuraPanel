@@ -14,6 +14,7 @@ class MemoryConfigRepository implements ConfigRepository {
   versions = new Map<string, number>();
   async findById(id: string) { return this.configs.get(id) ?? null; }
   async listByUserId(userId: string) { return [...this.configs.values()].filter(c => c.userId === userId); }
+  async listByIds(ids: string[]) { return ids.map(id => this.configs.get(id)).filter((c): c is GeneratedConfig => Boolean(c)); }
   async save(config: GeneratedConfig) { this.configs.set(config.id, config); this.versions.set(config.id, 1); }
   async updateStatus(id: string, status: ConfigStatus, updatedAt: string) {
     const config = this.configs.get(id); if (!config) return false;
@@ -38,6 +39,7 @@ class MemorySubscriptionRepository implements SubscriptionRepository {
   subscriptions = new Map<string, Subscription>();
   versions = new Map<string, SubscriptionVersion[]>();
   async findById(id: string) { return this.subscriptions.get(id) ?? null; }
+  async findByPublicTokenHash(tokenHash: string) { return [...this.subscriptions.values()].find(s => s.publicTokenHash === tokenHash) ?? null; }
   async listByUserId(userId: string) { return [...this.subscriptions.values()].filter(s => s.userId === userId); }
   async create(subscription: Subscription) { this.subscriptions.set(subscription.id, subscription); }
   async updateStatus(id: string, status: Subscription["status"], updatedAt: string) {
@@ -75,7 +77,10 @@ describe("application integration flow", () => {
     const subscriptionRepo = new MemorySubscriptionRepository();
     const subscriptionService = new SubscriptionService(subscriptionRepo, configRepo, configService, userRepo);
 
-    const subscription = await subscriptionService.create("user-1", undefined, "2026-01-01T00:00:00.000Z");
+    const created = await subscriptionService.create("user-1", undefined, "2026-01-01T00:00:00.000Z");
+    expect(created.accessToken).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    const subscription = created.subscription;
+    expect(subscription.publicTokenHash).toBeTruthy();
     const v1 = await subscriptionService.provision(subscription.id, {
       templateId: "tpl-1"
     }, "2026-01-01T00:01:00.000Z");
