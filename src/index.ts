@@ -21,6 +21,9 @@ import { D1SubscriptionRepository } from "./repositories/subscription-repository
 import type { Endpoint } from "./models/endpoint";
 import { KvRateLimiter } from "./security/kv-rate-limit";
 import { EmergencyLock } from "./security/emergency-lock";
+import { HealthApi } from "./api/health-api";
+import { D1SessionRepository } from "./repositories/session-repository";
+import { ownerDashboardResponse } from "./ui/owner-dashboard";
 
 export interface Env {
   AUTH_SECRET: string;
@@ -93,59 +96,24 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     }
 
 
-    // Phone-friendly OWNER dashboard. The session token is kept only in sessionStorage.
     if (url.pathname === "/owner" && request.method === "GET") {
-      return new Response(`<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>SakuraPanel Owner</title>
-<style>
-body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:720px;margin:0 auto;padding:24px;background:#111;color:#fff}
-.card{background:#1b1b1b;border:1px solid #333;border-radius:16px;padding:18px;margin:12px 0}
-input,button{width:100%;box-sizing:border-box;padding:14px;margin:7px 0;border-radius:10px;border:1px solid #555;background:#222;color:#fff}
-button{background:#e85d9e;border:0;font-weight:700}
-.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.stat{font-size:28px;font-weight:800}.muted{color:#aaa}
-pre{white-space:pre-wrap;word-break:break-word}
-</style></head><body>
-<h2>🌸 SakuraPanel Owner</h2>
-<section id="login" class="card">
-<form id="loginForm" method="post" action="/owner/login">
-<p class="muted">Create a temporary Owner session. The credential is sent only over HTTPS and is not stored.</p>
-<input id="u" name="username" value="ahora_8019" autocomplete="username">
-<input id="s" name="bootstrapSecret" type="password" placeholder="Bootstrap secret" autocomplete="off">
-<button id="go" type="submit">Open Dashboard</button>
-</form>
-<pre id="err"></pre>
-</section>
-<section id="app" hidden>
-<div class="card"><strong>OWNER</strong><div id="who" class="muted"></div></div>
-<div class="grid">
-<div class="card"><div id="users" class="stat">—</div><div class="muted">Users</div></div>
-<div class="card"><div id="endpoints" class="stat">—</div><div class="muted">Endpoints</div></div>
-<div class="card"><div id="templates" class="stat">—</div><div class="muted">Templates</div></div>
-</div>
-<div class="card"><button id="refresh">Refresh</button><button id="logout">Logout</button><pre id="out"></pre></div>
-</section>
-<script>
-const $=id=>document.getElementById(id);
-async function api(path){
- const r=await fetch(path,{credentials:"same-origin"});
- const j=await r.json();
- if(!r.ok) throw new Error(j.error||("HTTP "+r.status));
- return j;
-}
-async function load(){
- const [u,e,t]=await Promise.all([api("/internal/users"),api("/internal/endpoints"),api("/internal/templates")]);
- $("users").textContent=Array.isArray(u.value)?u.value.length:"?";
- $("endpoints").textContent=Array.isArray(e.value)?e.value.length:"?";
- $("templates").textContent=Array.isArray(t.value)?t.value.length:"?";
- $("who").textContent="ahora_8019 • authenticated";
- $("login").hidden=true;$("app").hidden=false;
- $("out").textContent="";
-}
-$("refresh").onclick=()=>load().catch(e=>$("out").textContent=String(e));
-$("logout").onclick=()=>{document.cookie="sp_session=; Max-Age=0; Path=/;";location.reload()};
-load().catch(()=>{});
-</script></body></html>`, {headers:{"content-type":"text/html; charset=UTF-8","cache-control":"no-store"}});
+      return ownerDashboardResponse();
+    }
+
+    if (url.pathname === "/owner/logout" && request.method === "POST") {
+      const token = AuthService.extractBearer(request);
+      if (token) {
+        const principal = await auth.verifyToken(token);
+        if (principal) await new D1SessionRepository(env.DB!).revoke(principal.sessionId);
+      }
+      return new Response(null, {
+        status: 303,
+        headers: {
+          "Location": "/owner",
+          "Set-Cookie": "sp_session=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0",
+          "Cache-Control": "no-store"
+        }
+      });
     }
 
     if (url.pathname === "/owner/login" && request.method === "POST") {
@@ -365,6 +333,15 @@ load().catch(()=>{});
       userRepository
     );
     const subscriptionApi = new SubscriptionApi(subscriptionService);
+    const healthApi = new HealthApi(endpointService);
+
+    const endpointHealthMatch = url.pathname.match(/^\/internal\/endpoints\/([^/]+)\/health$/);
+    if (endpointHealthMatch && request.method === "POST") {
+      let body: unknown;
+      try { body = await request.json(); }
+      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return healthApi.observe(context, decodeURIComponent(endpointHealthMatch[1]), body);
+    }
 
     if (url.pathname === "/internal/endpoints") {
       if (request.method === "GET") {
