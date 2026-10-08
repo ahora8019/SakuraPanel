@@ -24,6 +24,7 @@ import { EmergencyLock } from "./security/emergency-lock";
 import { HealthApi } from "./api/health-api";
 import { D1SessionRepository } from "./repositories/session-repository";
 import { ownerDashboardResponse } from "./ui/owner-dashboard";
+import { cleanupRateLimitBuckets } from "./security/rate-limit-cleanup";
 
 export interface Env {
   AUTH_SECRET: string;
@@ -33,6 +34,11 @@ export interface Env {
 }
 
 export default {
+  async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+    if (!env.DB) return;
+    await cleanupRateLimitBuckets(env.DB);
+  },
+
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
