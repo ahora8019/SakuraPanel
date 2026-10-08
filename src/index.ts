@@ -378,6 +378,11 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       return subscriptionApi.create(context, body);
     }
 
+    const subscriptionTokenRotateMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/token\/rotate$/);
+    if (subscriptionTokenRotateMatch && request.method === "POST") {
+      return subscriptionApi.rotateToken(context, decodeURIComponent(subscriptionTokenRotateMatch[1]));
+    }
+
     const subscriptionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)$/);
     if (subscriptionMatch && request.method === "GET") return subscriptionApi.get(context, decodeURIComponent(subscriptionMatch[1]));
 
