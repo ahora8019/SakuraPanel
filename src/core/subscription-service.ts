@@ -104,17 +104,8 @@ export class SubscriptionService {
       now
     });
 
-    const latest = await this.repository.getLatestVersion(subscriptionId);
-    const version: SubscriptionVersion = {
-      id: crypto.randomUUID(),
-      subscriptionId,
-      version: (latest?.version ?? 0) + 1,
-      configIds: configs.map(config => config.id),
-      createdAt: now
-    };
+    return this.saveNextVersion(subscriptionId, configs.map(config => config.id), now);
 
-    await this.repository.saveVersion(version);
-    return version;
   }
 
   async rebuildVersion(
@@ -153,16 +144,30 @@ export class SubscriptionService {
     });
     if (available.length === 0) throw new Error("no_eligible_configs");
 
-    const version: SubscriptionVersion = {
-      id: crypto.randomUUID(),
-      subscriptionId,
-      version: latest.version + 1,
-      configIds: available.map(config => config.id),
-      createdAt: now
-    };
+    return this.saveNextVersion(subscriptionId, available.map(config => config.id), now);
 
-    await this.repository.saveVersion(version);
-    return version;
+  }
+
+  private async saveNextVersion(subscriptionId: string, configIds: string[], now: string): Promise<SubscriptionVersion> {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const latest = await this.repository.getLatestVersion(subscriptionId);
+      const version: SubscriptionVersion = {
+        id: crypto.randomUUID(),
+        subscriptionId,
+        version: (latest?.version ?? 0) + 1,
+        configIds,
+        createdAt: now
+      };
+
+      try {
+        await this.repository.saveVersion(version);
+        return version;
+      } catch (error) {
+        if (!isUniqueViolation(error) || attempt === 4) throw error;
+      }
+    }
+
+    throw new Error("version_conflict");
   }
 
   async getLatestVersion(subscriptionId: string): Promise<SubscriptionVersion | null> {
@@ -178,4 +183,10 @@ export class SubscriptionService {
     if (!(await this.repository.updateStatus(id, status, now))) throw new Error("subscription_not_found");
     return this.get(id);
   }
+}
+
+
+function isUniqueViolation(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return message.includes("unique constraint") || message.includes("constraint failed") || message.includes("unique");
 }
