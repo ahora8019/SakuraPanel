@@ -62,10 +62,15 @@ async function verifySignature(
       ["verify"]
     );
 
+    const signatureBytes = base64UrlDecode(signature);
+    const signatureBuffer = signatureBytes.buffer.slice(
+      signatureBytes.byteOffset,
+      signatureBytes.byteOffset + signatureBytes.byteLength
+    );
     return await crypto.subtle.verify(
       "HMAC",
       key,
-      base64UrlDecode(signature),
+      signatureBuffer,
       encoder.encode(data)
     );
   } catch {
