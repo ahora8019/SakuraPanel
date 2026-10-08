@@ -43,7 +43,8 @@ describe("public subscription API reliability", () => {
     expect(response.headers.get("referrer-policy")).toBe("no-referrer");
     expect(response.headers.get("x-frame-options")).toBe("DENY");
     expect(response.headers.get("cross-origin-resource-policy")).toBe("same-origin");
-    expect((await response.json()).value.version).toBe(7);
+    const body = await response.json() as { ok: true; value: { version: number } };
+    expect(body.value.version).toBe(7);
     expect(getSnapshot).toHaveBeenCalledTimes(1);
   });
 
