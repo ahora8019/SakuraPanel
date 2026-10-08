@@ -26,7 +26,10 @@ export class PublicSubscriptionApi {
           "cache-control": "private, no-store",
           "x-content-type-options": "nosniff",
           "referrer-policy": "no-referrer",
-          "content-security-policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+          "x-frame-options": "DENY",
+          "permissions-policy": "geolocation=(), microphone=(), camera=()",
+          "cross-origin-resource-policy": "same-origin"
         }
       });
     } catch (error) {
