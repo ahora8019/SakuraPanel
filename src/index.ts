@@ -22,6 +22,8 @@ import { EmergencyLock } from "./security/emergency-lock";
 import { D1SessionRepository } from "./repositories/session-repository";
 import { ownerDashboardResponse } from "./ui/owner-dashboard";
 import { cleanupRateLimitBuckets } from "./security/rate-limit-cleanup";
+import { runDiagnostics } from "./core/diagnostics";
+import { DiagnosticsApi } from "./api/diagnostics-api";
 
 export interface Env {
   AUTH_SECRET: string;
@@ -40,7 +42,29 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return Response.json({ ok: true, service: "sakurapanel" });
+      const requestId = crypto.randomUUID();
+      console.log(JSON.stringify({ event: "request", requestId, method: request.method, path: url.pathname }));
+      return Response.json({ ok: true, service: "sakurapanel", requestId }, {
+        headers: { "cache-control": "no-store", "x-request-id": requestId }
+      });
+    }
+
+    if (request.method === "GET" && url.pathname === "/ready") {
+      const requestId = crypto.randomUUID();
+      const diagnostics = await runDiagnostics(env);
+      return Response.json({
+        ok: diagnostics.ok,
+        service: "sakurapanel",
+        requestId,
+        checks: {
+          database: diagnostics.checks.database.status,
+          schema: diagnostics.checks.schema.status,
+          foreignKeys: diagnostics.checks.foreignKeys.status
+        }
+      }, {
+        status: diagnostics.ok ? 200 : 503,
+        headers: { "cache-control": "no-store", "x-request-id": requestId }
+      });
     }
 
     if (!env.DB && url.pathname.startsWith("/internal/")) {
@@ -335,6 +359,11 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     const templateApi = new TemplateApi(templateService);
     const configApi = new ConfigApi(configService);
     const subscriptionApi = new SubscriptionApi(subscriptionService);
+    const diagnosticsApi = new DiagnosticsApi();
+
+    if (url.pathname === "/internal/diagnostics" && request.method === "GET") {
+      return diagnosticsApi.get(context, env);
+    }
 
     if (url.pathname === "/internal/templates" && request.method === "GET") return templateApi.list(context);
     if (url.pathname === "/internal/templates" && request.method === "POST") {
