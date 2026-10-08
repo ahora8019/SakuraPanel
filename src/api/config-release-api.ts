@@ -7,7 +7,8 @@ export class ConfigReleaseApi {
 
   async list(context: SecurityContext | null, configId: string): Promise<Response> {
     try {
-      requirePermission(context, "config:read");
+      const ctx = requirePermission(context, "config:read");
+      await this.assertOwnership(ctx, configId);
       return Response.json({ ok: true, value: await this.service.list(configId) }, {
         headers: { "cache-control": "no-store" }
       });
@@ -19,6 +20,7 @@ export class ConfigReleaseApi {
   async publish(context: SecurityContext | null, configId: string, version: number): Promise<Response> {
     try {
       const ctx = requirePermission(context, "config:write");
+      await this.assertOwnership(ctx, configId);
       const value = await this.service.publish(configId, version, ctx.principal.userId);
       return Response.json({ ok: true, value }, { status: 200, headers: { "cache-control": "no-store" } });
     } catch (error) {
@@ -29,11 +31,18 @@ export class ConfigReleaseApi {
   async rollback(context: SecurityContext | null, configId: string, version: number): Promise<Response> {
     try {
       const ctx = requirePermission(context, "config:write");
+      await this.assertOwnership(ctx, configId);
       const value = await this.service.rollback(configId, version, ctx.principal.userId);
       return Response.json({ ok: true, value }, { status: 200, headers: { "cache-control": "no-store" } });
     } catch (error) {
       return errorResponse(error, statusFor(error));
     }
+  }
+
+  private async assertOwnership(context: SecurityContext, configId: string): Promise<void> {
+    if (context.principal.role !== "MEMBER") return;
+    const ownerId = await this.service.getConfigOwner(configId);
+    if (ownerId !== context.principal.userId) throw new Error("not_found");
   }
 }
 
