@@ -13,6 +13,8 @@ import { DeviceService } from "./core/device-service";
 import { D1UserRepository } from "./repositories/user-repository";
 import { D1DeviceRepository } from "./repositories/device-repository";
 import { SubscriptionApi } from "./api/subscription-api";
+import { PublicSubscriptionApi } from "./api/public-subscription-api";
+import { SubscriptionDeliveryService } from "./core/subscription-delivery";
 import { SubscriptionService } from "./core/subscription-service";
 import { D1SubscriptionRepository } from "./repositories/subscription-repository";
 import { KvRateLimiter } from "./security/kv-rate-limit";
@@ -62,6 +64,29 @@ export default {
       } catch {
         return Response.json({ ok: false, error: "emergency_lock_active" }, { status: 503 });
       }
+    }
+
+    const publicSubscriptionMatch = url.pathname.match(/^\\/s\\/([^/]+)$/);
+    if (env.DB && publicSubscriptionMatch && request.method === "GET") {
+      const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
+      const decision = await new KvRateLimiter(env.DB).check(`public:${clientKey}`, 60, 60_000);
+      if (!decision.allowed) {
+        return Response.json({ ok: false, error: "rate_limited" }, {
+          status: 429,
+          headers: {
+            "retry-after": String(decision.retryAfterSeconds ?? 1),
+            "cache-control": "no-store"
+          }
+        });
+      }
+
+      const publicSubscriptionApi = new PublicSubscriptionApi(
+        new SubscriptionDeliveryService(
+          new D1SubscriptionRepository(env.DB),
+          new D1ConfigRepository(env.DB)
+        )
+      );
+      return publicSubscriptionApi.get(decodeURIComponent(publicSubscriptionMatch[1]));
     }
 
     if (!env.AUTH_SECRET) {
