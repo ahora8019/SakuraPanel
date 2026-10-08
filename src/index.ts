@@ -452,7 +452,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
 
     const subscriptionDiagnosticsMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/diagnostics$/);
     if (subscriptionDiagnosticsMatch && request.method === "GET") {
-      return subscriptionDiagnosticsApi.get(context, decodeURIComponent(subscriptionDiagnosticsMatch[1]));
+      return subscriptionDiagnosticsApi.get(context, decodeURIComponent(subscriptionDiagnosticsMatch[1]), url.searchParams);
     }
 
     const subscriptionTokenRotateMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/token\/rotate$/);
