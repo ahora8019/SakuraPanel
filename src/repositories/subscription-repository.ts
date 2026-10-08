@@ -17,6 +17,7 @@ function mapSubscription(row: Record<string, unknown>): Subscription {
     userId: String(row.user_id),
     status: row.status as Subscription["status"],
     expiresAt: row.expires_at == null ? undefined : String(row.expires_at),
+    ...(row.public_token_hash == null ? {} : { publicTokenHash: String(row.public_token_hash) }),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at)
   };
@@ -45,7 +46,7 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
 
   async findById(id: string): Promise<Subscription | null> {
     const row = await this.db.prepare(
-      "SELECT id, user_id, status, expires_at, created_at, updated_at FROM subscriptions WHERE id = ?"
+      "SELECT id, user_id, status, expires_at, public_token_hash, created_at, updated_at FROM subscriptions WHERE id = ?"
     ).bind(id).first<Record<string, unknown>>();
 
     return row ? mapSubscription(row) : null;
@@ -53,14 +54,14 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
 
   async findByPublicTokenHash(tokenHash: string): Promise<Subscription | null> {
     const row = await this.db.prepare(
-      "SELECT id, user_id, status, expires_at, created_at, updated_at FROM subscriptions WHERE public_token_hash = ? LIMIT 1"
+      "SELECT id, user_id, status, expires_at, public_token_hash, created_at, updated_at FROM subscriptions WHERE public_token_hash = ? LIMIT 1"
     ).bind(tokenHash).first<Record<string, unknown>>();
     return row ? mapSubscription(row) : null;
   }
 
   async listByUserId(userId: string): Promise<Subscription[]> {
     const result = await this.db.prepare(
-      "SELECT id, user_id, status, expires_at, created_at, updated_at FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC"
+      "SELECT id, user_id, status, expires_at, public_token_hash, created_at, updated_at FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC"
     ).bind(userId).all<Record<string, unknown>>();
     return result.results.map(mapSubscription);
   }
