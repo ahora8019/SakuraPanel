@@ -102,6 +102,23 @@ export function evaluateCompatibilityMatrix(
     };
   }
 
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {
+      configId: config.id,
+      generatedAt,
+      entries: target.clients.map(client => ({
+        client,
+        platform: target.platform,
+        protocol: target.protocol,
+        status: "unknown",
+        reasons: ["compatibility_metadata_missing"],
+        supportedFeatures: [],
+        unsupportedFeatures: []
+      }))
+    };
+  }
+
+  const value = metadata as Record<string, unknown>;
   const entries: CompatibilityMatrixEntry[] = target.clients.map(client => {
     const definition = findClientDefinition(client);
     const reasons: string[] = [];
