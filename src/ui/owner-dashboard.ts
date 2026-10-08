@@ -138,11 +138,11 @@ async function load(){
   $("login").hidden=true; $("app").hidden=false;
 }
 function render(){
-  $("endpointsList").innerHTML=state.endpoints.map(e=>\`<div class="item"><b>${esc(e.name)}</b> <span class="pill">${esc(e.status)}</span><br><span class="muted">${esc(e.id)} • ${esc(e.host)}:${e.port} • ${esc(e.region||"-")}</span><div class="row"><button data-health="${esc(e.id)}" data-value="true">Mark Healthy</button><button class="danger" data-health="${esc(e.id)}" data-value="false">Mark Failure</button></div></div>\`).join("")||'<p class="muted">No endpoints yet.</p>';
-  $("templatesList").innerHTML=state.templates.map(t=>\`<div class="item"><b>${esc(t.name)}</b> <span class="pill">${esc(t.protocol)}</span><br><span class="muted">${esc(t.id)} • v${t.version}</span></div>\`).join("")||'<p class="muted">No templates yet.</p>';
-  $("configsList").innerHTML=state.configs.map(c=>\`<div class="item"><b>${esc(c.id)}</b><br><span class="muted">endpoint ${esc(c.endpointId)} • template ${esc(c.templateId)} • ${esc(c.status)}</span></div>\`).join("")||'<p class="muted">No configs yet.</p>';
-  $("subscriptionsList").innerHTML=state.subscriptions.map(s=>\`<div class="item"><b>${esc(s.id)}</b> <span class="pill">${esc(s.status)}</span><br><span class="muted">user ${esc(s.userId)}${s.expiresAt?" • expires "+esc(s.expiresAt):""}</span></div>\`).join("")||'<p class="muted">No subscriptions yet.</p>';
-  $("healthList").innerHTML=state.endpoints.map(e=>\`<div class="item"><b>${esc(e.name)}</b> — ${esc(e.status)}<br><span class="muted">${esc(e.id)}</span></div>\`).join("")||'<p class="muted">No endpoints.</p>';
+  $("endpointsList").innerHTML=state.endpoints.map(e=>'<div class="item"><b>'+esc(e.name)+'</b> <span class="pill">'+esc(e.status)+'</span><br><span class="muted">'+esc(e.id)+' • '+esc(e.host)+':'+e.port+' • '+esc(e.region||"-")+'</span><div class="row"><button data-health="'+esc(e.id)+'" data-value="true">Mark Healthy</button><button class="danger" data-health="'+esc(e.id)+'" data-value="false">Mark Failure</button></div></div>').join("")||'<p class="muted">No endpoints yet.</p>';
+  $("templatesList").innerHTML=state.templates.map(t=>'<div class="item"><b>'+esc(t.name)+'</b> <span class="pill">'+esc(t.protocol)+'</span><br><span class="muted">'+esc(t.id)+' • v'+t.version+'</span></div>').join("")||'<p class="muted">No templates yet.</p>';
+  $("configsList").innerHTML=state.configs.map(c=>'<div class="item"><b>'+esc(c.id)+'</b><br><span class="muted">endpoint '+esc(c.endpointId)+' • template '+esc(c.templateId)+' • '+esc(c.status)+'</span></div>').join("")||'<p class="muted">No configs yet.</p>';
+  $("subscriptionsList").innerHTML=state.subscriptions.map(s=>'<div class="item"><b>'+esc(s.id)+'</b> <span class="pill">'+esc(s.status)+'</span><br><span class="muted">user '+esc(s.userId)+(s.expiresAt?" • expires "+esc(s.expiresAt):"")+'</span></div>').join("")||'<p class="muted">No subscriptions yet.</p>';
+  $("healthList").innerHTML=state.endpoints.map(e=>'<div class="item"><b>'+esc(e.name)+'</b> — '+esc(e.status)+'<br><span class="muted">'+esc(e.id)+'</span></div>').join("")||'<p class="muted">No endpoints.</p>';
 }
 $("endpointForm").onsubmit=async e=>{
  e.preventDefault(); const f=new FormData(e.target); const now=new Date().toISOString();
