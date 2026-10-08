@@ -83,7 +83,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
  e.preventDefault();
  const out=document.getElementById("out"); out.textContent="Working...";
  try{
-  const r=await fetch("/internal/bootstrap",{method:"POST",headers:{"Content-Type":"application/json","X-Bootstrap-Secret":document.getElementById("s").value},body:JSON.stringify({username:document.getElementById("u").value})});
+  const r=await fetch("/internal/bootstrap",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({username:document.getElementById("u").value,bootstrapSecret:document.getElementById("s").value})});
   const j=await r.json();
   if(j?.value?.token) j.value.token="TOKEN_CREATED_IN_BROWSER_DO_NOT_SHARE";
   out.textContent=JSON.stringify({status:r.status,...j},null,2);
@@ -96,9 +96,8 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     // One-time production bootstrap: creates the first OWNER only when the database has no users.
     // It uses a separate secret so AUTH_SECRET never doubles as a bootstrap credential.
     if (url.pathname === "/internal/bootstrap" && request.method === "POST") {
-      const bootstrapSecret = request.headers.get("X-Bootstrap-Secret");
-      if (!env.BOOTSTRAP_SECRET || !bootstrapSecret || bootstrapSecret !== env.BOOTSTRAP_SECRET) {
-        return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
+      if (!env.BOOTSTRAP_SECRET) {
+        return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
       }
 
       const existing = await env.DB!.prepare("SELECT COUNT(*) AS count FROM users").first<{ count: number }>();
@@ -107,11 +106,31 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       }
 
       let body: unknown;
-      try { body = await request.json(); }
-      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      try {
+        const contentType = request.headers.get("content-type") ?? "";
+        if (contentType.includes("application/json")) {
+          body = await request.json();
+        } else if (contentType.includes("application/x-www-form-urlencoded")) {
+          const form = await request.formData();
+          body = {
+            username: form.get("username"),
+            bootstrapSecret: form.get("bootstrapSecret")
+          };
+        } else {
+          return Response.json({ ok: false, error: "invalid_content_type" }, { status: 415 });
+        }
+      } catch {
+        return Response.json({ ok: false, error: "invalid_request" }, { status: 400 });
+      }
 
-      if (!body || typeof body !== "object" || typeof (body as Record<string, unknown>).username !== "string") {
+      if (!body || typeof body !== "object" ||
+          typeof (body as Record<string, unknown>).username !== "string" ||
+          typeof (body as Record<string, unknown>).bootstrapSecret !== "string") {
         return Response.json({ ok: false, error: "validation_failed" }, { status: 400 });
+      }
+
+      if ((body as Record<string, unknown>).bootstrapSecret !== env.BOOTSTRAP_SECRET) {
+        return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
       }
 
       const username = ((body as Record<string, unknown>).username as string).trim();
