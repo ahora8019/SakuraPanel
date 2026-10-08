@@ -7,13 +7,13 @@ export class DeviceApi {
   constructor(private readonly service: DeviceService) {}
 
   async list(context: SecurityContext | null, userId: string): Promise<Response> {
-    try { const ctx = requirePermission(context, "user:read"); if (ctx.principal.role === "MEMBER" && ctx.principal.userId !== userId) throw new Error("not_found"); return Response.json({ ok: true, value: await this.service.listForUser(userId) }); }
+    try { const ctx = requirePermission(context, "device:read"); if (ctx.principal.role === "MEMBER" && ctx.principal.userId !== userId) throw new Error("not_found"); return Response.json({ ok: true, value: await this.service.listForUser(userId) }); }
     catch (error) { return errorResponse(error, statusFor(error)); }
   }
 
   async create(context: SecurityContext | null, body: unknown): Promise<Response> {
     try {
-      const ctx = requirePermission(context, "user:write");
+      const ctx = requirePermission(context, "device:write");
       if (!isCreateBody(body)) throw new Error("validation_failed");
       if (ctx.principal.role === "MEMBER" && ctx.principal.userId !== body.userId) throw new Error("not_found");
       const value = await this.service.create({ ...body, now: new Date().toISOString() });
