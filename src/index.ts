@@ -111,7 +111,7 @@ export default {
           new D1ConfigRepository(env.DB)
         )
       );
-      return publicSubscriptionApi.get(publicSubscriptionMatch[1]);
+      return publicSubscriptionApi.get(publicSubscriptionMatch[1], url.searchParams);
     }
 
     if (!env.AUTH_SECRET) {
