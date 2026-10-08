@@ -1,0 +1,42 @@
+import { describe, expect, it } from "vitest";
+import { SubscriptionDiagnosticsService } from "../src/core/subscription-diagnostics";
+import type { Subscription, SubscriptionVersion } from "../src/models/subscription";
+import type { GeneratedConfig } from "../src/models/config";
+import type { ConfigRepository } from "../src/repositories/config-repository";
+import type { SubscriptionRepository } from "../src/repositories/subscription-repository";
+
+class C implements ConfigRepository {
+  constructor(private values: GeneratedConfig[]) {}
+  async findById(id:string){return this.values.find(x=>x.id===id)??null}
+  async listByUserId(id:string){return this.values.filter(x=>x.userId===id)}
+  async listByIds(ids:string[]){return ids.map(id=>this.values.find(x=>x.id===id)).filter((x):x is GeneratedConfig=>!!x)}
+  async save(){}
+  async updateStatus(){return true}
+  async getLatestVersion(){return 1}
+  async saveVersion(){}
+}
+class S implements SubscriptionRepository {
+  constructor(private sub:Subscription,private ver:SubscriptionVersion|null){}
+  async findById(id:string){return id===this.sub.id?this.sub:null}
+  async findByPublicTokenHash(){return null}
+  async listByUserId(){return [this.sub]}
+  async create(){}
+  async updatePublicTokenHash(){return true}
+  async updateStatus(){return true}
+  async getLatestVersion(){return this.ver}
+  async saveVersion(){}
+}
+const sub:Subscription={id:"s1",userId:"u1",status:"ACTIVE",createdAt:"2026-01-01T00:00:00.000Z",updatedAt:"2026-01-01T00:00:00.000Z"};
+const cfg=(id:string, status:GeneratedConfig["status"], userId="u1"):GeneratedConfig=>({id,userId,templateId:"t",templateVersion:1,payload:{},status,createdAt:"2026-01-01T00:00:00.000Z"});
+describe("subscription diagnostics",()=>{
+ it("reports healthy delivery",async()=>{
+  const ver:SubscriptionVersion={id:"v1",subscriptionId:"s1",version:1,configIds:["c1"],createdAt:"2026-01-01T00:00:00.000Z"};
+  const d=await new SubscriptionDiagnosticsService(new S(sub,ver),new C([cfg("c1","ACTIVE")])).inspect("s1","2026-01-01T00:01:00.000Z");
+  expect(d.status).toBe("healthy"); expect(d.configs.eligible).toBe(1); expect(d.issues).toEqual([]);
+ });
+ it("detects inactive, missing and ownership mismatches",async()=>{
+  const ver:SubscriptionVersion={id:"v1",subscriptionId:"s1",version:1,configIds:["c1","c2","missing"],createdAt:"2026-01-01T00:00:00.000Z"};
+  const d=await new SubscriptionDiagnosticsService(new S(sub,ver),new C([cfg("c1","REVOKED"),cfg("c2","ACTIVE","other")])).inspect("s1","2026-01-01T00:01:00.000Z");
+  expect(d.status).toBe("error"); expect(d.configs.inactive).toBe(1); expect(d.configs.wrongOwner).toBe(1); expect(d.configs.missing).toBe(1);
+ });
+});
