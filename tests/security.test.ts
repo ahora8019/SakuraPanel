@@ -34,6 +34,11 @@ describe("security core", () => {
     expect(await auth.verifyToken(token, 1060)).toBeNull();
   });
 
+  it("rejects oversized bearer tokens before parsing", async () => {
+    const auth = new AuthService("12345678901234567890123456789012");
+    expect(await auth.verifyToken("a".repeat(4097))).toBeNull();
+  });
+
   it("rejects malformed bearer values with extra segments", () => {
     const request = new Request("https://example.test", {
       headers: { Authorization: "Bearer abc extra" }
