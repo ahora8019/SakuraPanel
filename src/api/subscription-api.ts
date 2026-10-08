@@ -78,7 +78,7 @@ export class SubscriptionApi {
       const subscription = await this.service.get(id);
       if (ctx.principal.role === "MEMBER" && subscription.userId !== ctx.principal.userId) throw new Error("not_found");
       if (!isStatusBody(body)) throw new Error("validation_failed");
-      return Response.json({ ok: true, value: await this.service.updateStatus(id, body.status) });
+      return Response.json({ ok: true, value: toPublicSubscription(await this.service.updateStatus(id, body.status)) });
     } catch (error) { return errorResponse(error, statusFor(error)); }
   }
 }
