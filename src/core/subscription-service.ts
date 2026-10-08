@@ -1,10 +1,6 @@
-import type { GeneratedConfig } from "../models/config";
-import type { Endpoint } from "../models/endpoint";
 import type { Subscription, SubscriptionVersion } from "../models/subscription";
 import type { SubscriptionRepository } from "../repositories/subscription-repository";
 import type { ConfigRepository } from "../repositories/config-repository";
-import { EndpointService } from "./endpoint-service";
-import { FailoverEngine } from "./failover-engine";
 import { ConfigService } from "./config-service";
 import type { UserRepository } from "../repositories/user-repository";
 
@@ -12,9 +8,7 @@ export class SubscriptionService {
   constructor(
     private readonly repository: SubscriptionRepository,
     private readonly configs: ConfigRepository,
-    private readonly endpoints: EndpointService,
     private readonly configService?: ConfigService,
-    private readonly failover = new FailoverEngine(),
     private readonly users?: UserRepository
   ) {}
 
@@ -24,6 +18,7 @@ export class SubscriptionService {
       const user = await this.users.findById(userId);
       if (!user || user.status !== "ACTIVE") throw new Error("user_not_active");
     }
+
     const nowMs = Date.parse(now);
     if (Number.isNaN(nowMs)) throw new Error("invalid_timestamp");
     if (expiresAt) {
@@ -58,20 +53,14 @@ export class SubscriptionService {
     subscriptionId: string,
     input: {
       templateId: string;
-      region?: string;
-      maxEndpoints: number;
       deviceId?: string;
       expiresAt?: string;
-      allowDegraded?: boolean;
     },
     now = new Date().toISOString()
   ): Promise<SubscriptionVersion> {
-    if (!Number.isInteger(input.maxEndpoints) || input.maxEndpoints < 1 || input.maxEndpoints > 20) {
-      throw new Error("validation_failed");
-    }
-
     const subscription = await this.get(subscriptionId);
     if (subscription.status !== "ACTIVE") throw new Error("subscription_not_active");
+
     const nowMs = Date.parse(now);
     if (Number.isNaN(nowMs)) throw new Error("invalid_timestamp");
     if (subscription.expiresAt) {
@@ -83,29 +72,19 @@ export class SubscriptionService {
       if (Number.isNaN(expiresMs) || expiresMs <= nowMs) throw new Error("invalid_expiration");
     }
 
-    const endpoints = await this.endpoints.select({
-      region: input.region,
-      maxEndpoints: input.maxEndpoints,
-      allowDegraded: input.allowDegraded === true
-    });
-    if (endpoints.length === 0) throw new Error("no_eligible_endpoint");
-
     if (!this.configService) throw new Error("service_not_configured");
 
-    const configs = await this.configService.generateForEndpoints({
+    const config = await this.configService.generate({
       identity: {
         userId: subscription.userId,
         ...(input.deviceId ? { deviceId: input.deviceId } : {})
       },
-      endpoints: endpoints.map(endpoint => endpoint.id),
       templateId: input.templateId,
-      allowDegraded: input.allowDegraded === true,
       expiresAt: input.expiresAt ?? subscription.expiresAt,
       now
     });
 
-    return this.saveNextVersion(subscriptionId, configs.map(config => config.id), now);
-
+    return this.saveNextVersion(subscriptionId, [config.id], now);
   }
 
   async rebuildVersion(
@@ -114,6 +93,7 @@ export class SubscriptionService {
   ): Promise<SubscriptionVersion> {
     const subscription = await this.get(subscriptionId);
     if (subscription.status !== "ACTIVE") throw new Error("subscription_not_active");
+
     const nowMs = Date.parse(now);
     if (Number.isNaN(nowMs)) throw new Error("invalid_timestamp");
     if (subscription.expiresAt) {
@@ -124,28 +104,21 @@ export class SubscriptionService {
     const latest = await this.repository.getLatestVersion(subscriptionId);
     if (!latest || latest.configIds.length === 0) throw new Error("no_eligible_configs");
 
-    const configs: GeneratedConfig[] = [];
+    const available: string[] = [];
     for (const configId of latest.configIds) {
       const config = await this.configs.findById(configId);
-      if (config && config.userId === subscription.userId) configs.push(config);
+      if (
+        config &&
+        config.userId === subscription.userId &&
+        config.status === "ACTIVE" &&
+        (!config.expiresAt || Date.parse(config.expiresAt) > nowMs)
+      ) {
+        available.push(config.id);
+      }
     }
 
-    const endpointIds = [...new Set(configs.map(config => config.endpointId))];
-    const endpoints: Endpoint[] = [];
-    for (const endpointId of endpointIds) {
-      const result = await this.endpoints.get(endpointId);
-      if (result.ok) endpoints.push(result.value);
-    }
-
-    const available = this.failover.filterAvailable(configs, endpoints).filter(config => {
-      if (!config.expiresAt) return true;
-      const expiresMs = Date.parse(config.expiresAt);
-      return !Number.isNaN(expiresMs) && expiresMs > nowMs;
-    });
     if (available.length === 0) throw new Error("no_eligible_configs");
-
-    return this.saveNextVersion(subscriptionId, available.map(config => config.id), now);
-
+    return this.saveNextVersion(subscriptionId, available, now);
   }
 
   private async saveNextVersion(subscriptionId: string, configIds: string[], now: string): Promise<SubscriptionVersion> {
@@ -184,7 +157,6 @@ export class SubscriptionService {
     return this.get(id);
   }
 }
-
 
 function isUniqueViolation(error: unknown): boolean {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
