@@ -132,6 +132,7 @@ export class AuthService {
     token: string,
     now = Math.floor(Date.now() / 1000)
   ): Promise<AuthPrincipal | null> {
+    if (!token || token.length > 4096) return null;
     const parts = token.split(".");
     if (parts.length !== 3) return null;
 
