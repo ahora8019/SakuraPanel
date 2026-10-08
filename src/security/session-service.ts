@@ -1,6 +1,6 @@
 import type { AuthPrincipal } from "./auth";
 import type { SessionRepository } from "../repositories/session-repository";
-import type { D1UserRepository, UserRecord } from "../repositories/user-repository";
+import type { UserRepository, UserRecord } from "../repositories/user-repository";
 
 export interface SessionValidationResult {
   principal: AuthPrincipal;
@@ -10,7 +10,7 @@ export interface SessionValidationResult {
 export class SessionService {
   constructor(
     private readonly sessions: SessionRepository,
-    private readonly users: D1UserRepository
+    private readonly users: UserRepository
   ) {}
 
   async validate(
