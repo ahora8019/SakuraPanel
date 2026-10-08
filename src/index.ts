@@ -22,15 +22,10 @@ import { EmergencyLock } from "./security/emergency-lock";
 import { D1SessionRepository } from "./repositories/session-repository";
 import { ownerDashboardResponse } from "./ui/owner-dashboard";
 import { cleanupRateLimitBuckets } from "./security/rate-limit-cleanup";
-import { runDiagnostics } from "./core/diagnostics";
+import { runDiagnostics, runReadiness } from "./core/diagnostics";
 import { DiagnosticsApi } from "./api/diagnostics-api";
 
-export interface Env {
-  AUTH_SECRET: string;
-  BOOTSTRAP_SECRET?: string;
-  DB?: D1Database;
-  SECURITY_KV?: KVNamespace;
-}
+import type { Env } from "./types/env";
 
 export default {
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
@@ -51,18 +46,16 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/ready") {
       const requestId = crypto.randomUUID();
-      const diagnostics = await runDiagnostics(env);
+      const readiness = await runReadiness(env);
       return Response.json({
-        ok: diagnostics.ok,
+        ok: readiness.ok,
         service: "sakurapanel",
         requestId,
         checks: {
-          database: diagnostics.checks.database.status,
-          schema: diagnostics.checks.schema.status,
-          foreignKeys: diagnostics.checks.foreignKeys.status
+          database: readiness.database.status
         }
       }, {
-        status: diagnostics.ok ? 200 : 503,
+        status: readiness.ok ? 200 : 503,
         headers: { "cache-control": "no-store", "x-request-id": requestId }
       });
     }
