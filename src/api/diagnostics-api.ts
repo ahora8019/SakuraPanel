@@ -6,7 +6,7 @@ export class DiagnosticsApi {
   async get(context: SecurityContext | null, env: Env): Promise<Response> {
     try {
       requirePermission(context, "security:manage");
-      const diagnostics = await runDiagnostics(env);
+      const diagnostics = await runDiagnostics(env, true);
       return Response.json({ ok: diagnostics.ok, value: diagnostics }, {
         status: diagnostics.ok ? 200 : 503,
         headers: { "cache-control": "no-store" }
