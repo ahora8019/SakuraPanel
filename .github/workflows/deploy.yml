@@ -21,29 +21,27 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Install dependencies
         run: npm install
-
       - name: Typecheck
         run: npm run typecheck
-
       - name: Test
         run: npm test
-
       - name: Apply D1 migrations
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           command: d1 migrations apply sakurapanel --remote
-
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           command: deploy
+      - name: Production smoke test
+        env:
+          SAKURAPANEL_SMOKE_URL: ${{ secrets.SAKURAPANEL_SMOKE_URL }}
+        run: node scripts/smoke-test.mjs
