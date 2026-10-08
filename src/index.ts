@@ -104,7 +104,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       const token = AuthService.extractBearer(request);
       if (token) {
         const principal = await auth.verifyToken(token);
-        if (principal) await new D1SessionRepository(env.DB!).revoke(principal.sessionId);
+        if (principal) await new D1SessionRepository(env.DB!).revoke(principal.sessionId, new Date().toISOString());
       }
       return new Response(null, {
         status: 303,
