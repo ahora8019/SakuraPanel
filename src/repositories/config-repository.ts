@@ -8,6 +8,7 @@ export interface ConfigRepository {
   updateStatus(id: string, status: ConfigStatus, updatedAt: string): Promise<boolean>;
   getLatestVersion(configId: string): Promise<number>;
   saveVersion(configId: string, version: number, payload: Record<string, unknown>, createdAt: string): Promise<void>;
+  getVersionPayload?(configId: string, version: number): Promise<Record<string, unknown> | null>;
 }
 
 function mapConfig(row: Record<string, unknown>): GeneratedConfig {
@@ -37,14 +38,14 @@ export class D1ConfigRepository implements ConfigRepository {
 
   async findById(id: string): Promise<GeneratedConfig | null> {
     const row = await this.db.prepare(
-      "SELECT c.id,c.user_id,c.device_id,c.template_id,c.template_version,c.status,c.expires_at,c.created_at,c.updated_at,cv.version AS config_version,cv.payload FROM configs c LEFT JOIN config_versions cv ON cv.config_id=c.id AND cv.version=(SELECT MAX(v.version) FROM config_versions v WHERE v.config_id=c.id) WHERE c.id=?"
+      "SELECT c.id,c.user_id,c.device_id,c.template_id,c.template_version,c.status,c.expires_at,c.created_at,c.updated_at,cv.version AS config_version,cv.payload FROM configs c LEFT JOIN config_versions cv ON cv.config_id=c.id AND cv.version=COALESCE(c.published_version,(SELECT MAX(v.version) FROM config_versions v WHERE v.config_id=c.id)) WHERE c.id=?"
     ).bind(id).first<Record<string, unknown>>();
     return row ? mapConfig(row) : null;
   }
 
   async listByUserId(userId: string): Promise<GeneratedConfig[]> {
     const result = await this.db.prepare(
-      "SELECT c.id,c.user_id,c.device_id,c.template_id,c.template_version,c.status,c.expires_at,c.created_at,c.updated_at,cv.version AS config_version,cv.payload FROM configs c LEFT JOIN config_versions cv ON cv.config_id=c.id AND cv.version=(SELECT MAX(v.version) FROM config_versions v WHERE v.config_id=c.id) WHERE c.user_id=? ORDER BY c.created_at DESC"
+      "SELECT c.id,c.user_id,c.device_id,c.template_id,c.template_version,c.status,c.expires_at,c.created_at,c.updated_at,cv.version AS config_version,cv.payload FROM configs c LEFT JOIN config_versions cv ON cv.config_id=c.id AND cv.version=COALESCE(c.published_version,(SELECT MAX(v.version) FROM config_versions v WHERE v.config_id=c.id)) WHERE c.user_id=? ORDER BY c.created_at DESC"
     ).bind(userId).all<Record<string, unknown>>();
     return result.results.map(mapConfig);
   }
@@ -58,7 +59,7 @@ export class D1ConfigRepository implements ConfigRepository {
               cv.version AS config_version,cv.payload
          FROM configs c
          LEFT JOIN config_versions cv ON cv.config_id=c.id
-           AND cv.version=(SELECT MAX(v.version) FROM config_versions v WHERE v.config_id=c.id)
+           AND cv.version=COALESCE(c.published_version,(SELECT MAX(v.version) FROM config_versions v WHERE v.config_id=c.id))
         WHERE c.id IN (${placeholders})`
     ).bind(...ids).all<Record<string, unknown>>();
     return result.results.map(mapConfig);
@@ -66,7 +67,7 @@ export class D1ConfigRepository implements ConfigRepository {
 
   async save(config: GeneratedConfig): Promise<void> {
     const insertConfig = this.db.prepare(
-      "INSERT INTO configs (id,user_id,device_id,template_id,template_version,status,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)"
+      "INSERT INTO configs (id,user_id,device_id,template_id,template_version,status,expires_at,created_at,updated_at,published_version) VALUES (?,?,?,?,?,?,?,?,?,1)"
     ).bind(
       config.id, config.userId, config.deviceId ?? null, config.templateId, config.templateVersion,
       config.status, config.expiresAt ?? null, config.createdAt, config.createdAt
@@ -98,4 +99,17 @@ export class D1ConfigRepository implements ConfigRepository {
       "INSERT INTO config_versions (id,config_id,version,payload,created_at) VALUES (?,?,?,?,?)"
     ).bind(crypto.randomUUID(), configId, version, JSON.stringify(payload), createdAt).run();
   }
-}
+  }
+
+  async getVersionPayload(configId: string, version: number): Promise<Record<string, unknown> | null> {
+    const row = await this.db.prepare(
+      "SELECT payload FROM config_versions WHERE config_id=? AND version=?"
+    ).bind(configId, version).first<{payload:string}>();
+    if (!row) return null;
+    try {
+      const parsed = JSON.parse(row.payload);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, unknown> : null;
+    } catch {
+      return null;
+    }
+  }
