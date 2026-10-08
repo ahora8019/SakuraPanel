@@ -25,7 +25,7 @@ No VPS/endpoint architecture is planned for the current Cloudflare-native editio
 - Client Compatibility Matrix (metadata model + validation + compatibility evaluator)
 - Request IDs and structured logs
 - Production health/readiness checks
-- Audit Timeline
+- Audit Timeline (paginated API + RBAC + safe metadata)
 - Backup/restore procedures
 - Config release tracking
 - Published-version delivery isolation
@@ -98,10 +98,9 @@ Already implemented or substantially present:
 - Production deployment through GitHub Actions
 
 Next implementation batch:
-1. Audit timeline API
-2. Backup/restore runbook
-3. Preview environment
-4. Final dashboard and subscription UI
+1. Backup/restore runbook
+2. Preview environment
+3. Final dashboard and subscription UI
 
 ## Important operational rule
 
