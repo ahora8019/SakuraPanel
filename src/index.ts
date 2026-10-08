@@ -108,10 +108,12 @@ pre{white-space:pre-wrap;word-break:break-word}
 </style></head><body>
 <h2>🌸 SakuraPanel Owner</h2>
 <section id="login" class="card">
+<form id="loginForm" method="post" action="/owner/login">
 <p class="muted">Create a temporary Owner session. The credential is sent only over HTTPS and is not stored.</p>
 <input id="u" value="ahora_8019" autocomplete="username">
 <input id="s" type="password" placeholder="Bootstrap secret" autocomplete="off">
-<button id="go">Open Dashboard</button>
+<button id="go" type="submit">Open Dashboard</button>
+</form>
 <pre id="err"></pre>
 </section>
 <section id="app" hidden>
@@ -125,10 +127,8 @@ pre{white-space:pre-wrap;word-break:break-word}
 </section>
 <script>
 const $=id=>document.getElementById(id);
-const tokenKey="sakurapanel_owner_token";
 async function api(path){
- const t=sessionStorage.getItem(tokenKey);
- const r=await fetch(path,{headers:{Authorization:"Bearer "+t}});
+ const r=await fetch(path,{credentials:"same-origin"});
  const j=await r.json();
  if(!r.ok) throw new Error(j.error||("HTTP "+r.status));
  return j;
@@ -142,21 +142,65 @@ async function load(){
  $("login").hidden=true;$("app").hidden=false;
  $("out").textContent="";
 }
-$("go").onclick=async()=>{
- $("err").textContent="Working...";
- try{
-  const r=await fetch("/internal/bootstrap/session",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({username:$("u").value,bootstrapSecret:$("s").value})});
-  const j=await r.json();
-  if(!r.ok) throw new Error(j.error||("HTTP "+r.status));
-  sessionStorage.setItem(tokenKey,j.value.token);
-  $("s").value="";
-  await load();
- }catch(e){$("err").textContent=String(e)}
+$("go").onclick=()=>{
+ $("err").textContent="Opening secure session...";
+ $("loginForm").submit();
 };
 $("refresh").onclick=()=>load().catch(e=>$("out").textContent=String(e));
-$("logout").onclick=()=>{sessionStorage.removeItem(tokenKey);location.reload()};
-if(sessionStorage.getItem(tokenKey)) load().catch(()=>sessionStorage.removeItem(tokenKey));
+$("logout").onclick=()=>{document.cookie="sp_session=; Max-Age=0; Path=/;";location.reload()};
 </script></body></html>`, {headers:{"content-type":"text/html; charset=UTF-8","cache-control":"no-store"}});
+    }
+
+    if (url.pathname === "/owner/login" && request.method === "POST") {
+      if (!env.BOOTSTRAP_SECRET) {
+        return new Response("Service not configured", { status: 503 });
+      }
+
+      let form: FormData;
+      try {
+        form = await request.formData();
+      } catch {
+        return new Response("Invalid request", { status: 400 });
+      }
+
+      const username = String(form.get("username") ?? "").trim();
+      const bootstrapSecret = String(form.get("bootstrapSecret") ?? "");
+      if (!username || bootstrapSecret !== env.BOOTSTRAP_SECRET) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+
+      const owner = await env.DB!.prepare(
+        "SELECT id, username, role, status, security_version FROM users WHERE username = ? AND role = 'OWNER' LIMIT 1"
+      ).bind(username).first<{id:string;username:string;role:"OWNER";status:"ACTIVE";security_version:number}>();
+
+      if (!owner || owner.status !== "ACTIVE") {
+        return new Response("Owner not available", { status: 403 });
+      }
+
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const expires = new Date(now.getTime() + 60 * 60 * 1000);
+      const sessionId = crypto.randomUUID();
+      const token = await auth.issueToken({
+        userId: owner.id,
+        role: "OWNER",
+        sessionId,
+        tokenVersion: 1,
+        securityVersion: owner.security_version
+      }, 3600, Math.floor(now.getTime() / 1000));
+
+      await env.DB!.prepare(
+        "INSERT INTO auth_sessions (id, user_id, token_version, created_at, expires_at, revoked_at, last_seen_at) VALUES (?, ?, ?, ?, ?, NULL, ?)"
+      ).bind(sessionId, owner.id, 1, nowIso, expires.toISOString(), nowIso).run();
+
+      return new Response(null, {
+        status: 303,
+        headers: {
+          "Location": "/owner",
+          "Set-Cookie": `sp_session=${encodeURIComponent(token)}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600`,
+          "Cache-Control": "no-store"
+        }
+      });
     }
 
     // One-time production bootstrap: creates the first OWNER only when the database has no users.
