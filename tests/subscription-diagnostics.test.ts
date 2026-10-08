@@ -27,7 +27,10 @@ class S implements SubscriptionRepository {
   async saveVersion(){}
 }
 const sub:Subscription={id:"s1",userId:"u1",status:"ACTIVE",createdAt:"2026-01-01T00:00:00.000Z",updatedAt:"2026-01-01T00:00:00.000Z"};
-const cfg=(id:string, status:GeneratedConfig["status"], userId="u1"):GeneratedConfig=>({id,userId,templateId:"t",templateVersion:1,payload:{},status,createdAt:"2026-01-01T00:00:00.000Z"});
+const cfg=(id:string, status:GeneratedConfig["status"], userId="u1", compatibility?:Record<string, unknown>):GeneratedConfig=>({
+  id,userId,templateId:"t",templateVersion:1,payload:compatibility ? { compatibility } : {},status,createdAt:"2026-01-01T00:00:00.000Z"
+});
+
 describe("subscription diagnostics",()=>{
  it("reports healthy delivery",async()=>{
   const ver:SubscriptionVersion={id:"v1",subscriptionId:"s1",version:1,configIds:["c1"],createdAt:"2026-01-01T00:00:00.000Z"};
@@ -38,5 +41,22 @@ describe("subscription diagnostics",()=>{
   const ver:SubscriptionVersion={id:"v1",subscriptionId:"s1",version:1,configIds:["c1","c2","missing"],createdAt:"2026-01-01T00:00:00.000Z"};
   const d=await new SubscriptionDiagnosticsService(new S(sub,ver),new C([cfg("c1","REVOKED"),cfg("c2","ACTIVE","other")])).inspect("s1","2026-01-01T00:01:00.000Z");
   expect(d.status).toBe("error"); expect(d.configs.inactive).toBe(1); expect(d.configs.wrongOwner).toBe(1); expect(d.configs.missing).toBe(1);
+ });
+ it("reports compatibility health for eligible configs",async()=>{
+  const ver:SubscriptionVersion={id:"v1",subscriptionId:"s1",version:1,configIds:["c1"],createdAt:"2026-01-01T00:00:00.000Z"};
+  const compatibility={platform:"ANDROID",protocol:"VLESS",clients:["v2rayNG"],features:["TCP","TLS"]};
+  const target={platform:"ANDROID" as const,protocol:"VLESS" as const,clients:["v2rayNG"],features:["TCP","TLS"] as const};
+  const d=await new SubscriptionDiagnosticsService(new S(sub,ver),new C([cfg("c1","ACTIVE","u1",compatibility)])).inspect("s1","2026-01-01T00:01:00.000Z",target);
+  expect(d.status).toBe("healthy");
+  expect(d.compatibility).toEqual({checked:1,compatible:1,partial:0,incompatible:0,unknown:0});
+ });
+ it("marks incompatible configs as an error",async()=>{
+  const ver:SubscriptionVersion={id:"v1",subscriptionId:"s1",version:1,configIds:["c1"],createdAt:"2026-01-01T00:00:00.000Z"};
+  const compatibility={platform:"ANDROID",protocol:"VLESS",clients:["v2rayNG"],features:["TCP"]};
+  const target={platform:"IOS" as const,protocol:"VLESS" as const,clients:["v2rayNG"]};
+  const d=await new SubscriptionDiagnosticsService(new S(sub,ver),new C([cfg("c1","ACTIVE","u1",compatibility)])).inspect("s1","2026-01-01T00:01:00.000Z",target);
+  expect(d.status).toBe("error");
+  expect(d.compatibility?.incompatible).toBe(1);
+  expect(d.issues).toContain("incompatible_configs");
  });
 });
