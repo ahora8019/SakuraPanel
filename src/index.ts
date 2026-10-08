@@ -30,6 +30,7 @@ import { D1ConfigReleaseRepository } from "./repositories/config-release-reposit
 import { D1AuditRepository } from "./repositories/audit-repository";
 import { SubscriptionDiagnosticsService } from "./core/subscription-diagnostics";
 import { SubscriptionDiagnosticsApi } from "./api/subscription-diagnostics-api";
+import { AuditApi } from "./api/audit-api";
 
 import type { Env } from "./types/env";
 
@@ -369,9 +370,14 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       new SubscriptionDiagnosticsService(subscriptionRepository, configRepository)
     );
     const diagnosticsApi = new DiagnosticsApi();
+    const auditApi = new AuditApi(new D1AuditRepository(env.DB!));
 
     if (url.pathname === "/internal/diagnostics" && request.method === "GET") {
       return diagnosticsApi.get(context, env);
+    }
+
+    if (url.pathname === "/internal/audit" && request.method === "GET") {
+      return auditApi.list(context, url.searchParams);
     }
 
     if (url.pathname === "/internal/templates" && request.method === "GET") return templateApi.list(context);
