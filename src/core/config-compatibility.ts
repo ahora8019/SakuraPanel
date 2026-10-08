@@ -123,7 +123,18 @@ export function evaluateCompatibilityMatrix(
     if (!definition.platforms.includes(target.platform)) reasons.push("platform_unsupported");
     if (!definition.protocols.includes(target.protocol)) reasons.push("protocol_unsupported");
 
-    const requiredFeatures = target.features ?? [];
+    if (value.platform !== target.platform) reasons.push("platform_mismatch");
+    if (value.protocol !== target.protocol) reasons.push("protocol_mismatch");
+
+    const declaredClients = value.clients as string[];
+    if (!declaredClients.some(name => name.toLowerCase() === client.toLowerCase())) {
+      reasons.push("client_not_declared");
+    }
+
+    const requiredFeatures = Array.from(new Set([
+      ...((value.features as CompatibilityFeature[] | undefined) ?? []),
+      ...(target.features ?? [])
+    ]));
     for (const feature of requiredFeatures) {
       if (definition.features.includes(feature)) supportedFeatures.push(feature);
       else unsupportedFeatures.push(feature);
@@ -131,7 +142,11 @@ export function evaluateCompatibilityMatrix(
     if (unsupportedFeatures.length > 0) reasons.push("feature_unsupported");
 
     const status =
-      reasons.includes("platform_unsupported") || reasons.includes("protocol_unsupported")
+      reasons.includes("platform_mismatch") ||
+      reasons.includes("protocol_mismatch") ||
+      reasons.includes("platform_unsupported") ||
+      reasons.includes("protocol_unsupported") ||
+      reasons.includes("client_not_declared")
         ? "incompatible"
         : unsupportedFeatures.length > 0
           ? "partial"
