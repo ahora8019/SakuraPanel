@@ -28,7 +28,10 @@ export class SessionService {
     if (session.token_version !== principal.tokenVersion) return null;
     if (user.security_version !== principal.securityVersion) return null;
 
-    await this.sessions.touch(principal.sessionId, nowIso);
+    const lastSeen = session.last_seen_at ? Date.parse(session.last_seen_at) : 0;
+    if (!Number.isFinite(lastSeen) || now.getTime() - lastSeen >= 5 * 60 * 1000) {
+      await this.sessions.touch(principal.sessionId, nowIso);
+    }
 
     return { principal, user };
   }
