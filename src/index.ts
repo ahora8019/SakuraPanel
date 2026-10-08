@@ -66,7 +66,7 @@ export default {
       }
     }
 
-    const publicSubscriptionMatch = url.pathname.match(/^\\/s\\/([^/]+)$/);
+    const publicSubscriptionMatch = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{43})$/);
     if (env.DB && publicSubscriptionMatch && request.method === "GET") {
       const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
       const decision = await new KvRateLimiter(env.DB).check(`public:${clientKey}`, 60, 60_000);
@@ -86,7 +86,7 @@ export default {
           new D1ConfigRepository(env.DB)
         )
       );
-      return publicSubscriptionApi.get(decodeURIComponent(publicSubscriptionMatch[1]));
+      return publicSubscriptionApi.get(publicSubscriptionMatch[1]);
     }
 
     if (!env.AUTH_SECRET) {
