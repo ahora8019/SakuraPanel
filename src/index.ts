@@ -24,6 +24,7 @@ import { EmergencyLock } from "./security/emergency-lock";
 
 export interface Env {
   AUTH_SECRET: string;
+  BOOTSTRAP_SECRET?: string;
   DB?: D1Database;
   RATE_LIMIT_KV?: KVNamespace;
   SECURITY_KV?: KVNamespace;
@@ -59,10 +60,10 @@ export default {
     const auth = new AuthService(env.AUTH_SECRET);
 
     // One-time production bootstrap: creates the first OWNER only when the database has no users.
-    // It is authenticated with AUTH_SECRET itself and becomes permanently unavailable after first use.
+    // It uses a separate secret so AUTH_SECRET never doubles as a bootstrap credential.
     if (url.pathname === "/internal/bootstrap" && request.method === "POST") {
       const bootstrapSecret = request.headers.get("X-Bootstrap-Secret");
-      if (!bootstrapSecret || bootstrapSecret !== env.AUTH_SECRET) {
+      if (!env.BOOTSTRAP_SECRET || !bootstrapSecret || bootstrapSecret !== env.BOOTSTRAP_SECRET) {
         return Response.json({ ok: false, error: "unauthorized" }, { status: 401 });
       }
 
