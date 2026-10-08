@@ -43,5 +43,5 @@ jobs:
           command: deploy
       - name: Production smoke test
         env:
-          SAKURAPANEL_SMOKE_URL: ${{ secrets.SAKURAPANEL_SMOKE_URL }}
+          SAKURAPANEL_SMOKE_URL: https://sakurapanel.ronintrb.workers.dev
         run: node scripts/smoke-test.mjs
