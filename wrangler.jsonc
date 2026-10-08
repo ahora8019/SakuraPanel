@@ -9,7 +9,8 @@
     {
       "binding": "DB",
       "database_name": "sakurapanel",
-      "database_id": "db7c0fc3-7e65-49c7-8005-a23fd9adbbfb"
+      "database_id": "db7c0fc3-7e65-49c7-8005-a23fd9adbbfb",
+      "migrations_dir": "migrations"
     }
   ],
   "kv_namespaces": [
