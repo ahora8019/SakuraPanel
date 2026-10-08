@@ -3,6 +3,7 @@ import type { GeneratedConfig, ConfigStatus } from "../models/config";
 export interface ConfigRepository {
   findById(id: string): Promise<GeneratedConfig | null>;
   listByUserId(userId: string): Promise<GeneratedConfig[]>;
+  listByIds(ids: string[]): Promise<GeneratedConfig[]>;
   save(config: GeneratedConfig): Promise<void>;
   updateStatus(id: string, status: ConfigStatus, updatedAt: string): Promise<boolean>;
   getLatestVersion(configId: string): Promise<number>;
@@ -45,6 +46,21 @@ export class D1ConfigRepository implements ConfigRepository {
     const result = await this.db.prepare(
       "SELECT c.id,c.user_id,c.device_id,c.template_id,c.template_version,c.status,c.expires_at,c.created_at,c.updated_at,cv.version AS config_version,cv.payload FROM configs c LEFT JOIN config_versions cv ON cv.config_id=c.id AND cv.version=(SELECT MAX(v.version) FROM config_versions v WHERE v.config_id=c.id) WHERE c.user_id=? ORDER BY c.created_at DESC"
     ).bind(userId).all<Record<string, unknown>>();
+    return result.results.map(mapConfig);
+  }
+
+  async listByIds(ids: string[]): Promise<GeneratedConfig[]> {
+    if (ids.length === 0) return [];
+    if (ids.length > 100) throw new Error("validation_failed");
+    const placeholders = ids.map(() => "?").join(",");
+    const result = await this.db.prepare(
+      `SELECT c.id,c.user_id,c.device_id,c.template_id,c.template_version,c.status,c.expires_at,c.created_at,c.updated_at,
+              cv.version AS config_version,cv.payload
+         FROM configs c
+         LEFT JOIN config_versions cv ON cv.config_id=c.id
+           AND cv.version=(SELECT MAX(v.version) FROM config_versions v WHERE v.config_id=c.id)
+        WHERE c.id IN (${placeholders})`
+    ).bind(...ids).all<Record<string, unknown>>();
     return result.results.map(mapConfig);
   }
 
