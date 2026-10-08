@@ -16,6 +16,10 @@ export class SubscriptionEngine {
       throw new Error("subscription_not_active");
     }
 
+    const now = input.now ?? new Date().toISOString();
+    const nowMs = Date.parse(now);
+    if (Number.isNaN(nowMs)) throw new Error("invalid_timestamp");
+
     const eligible = input.configs.filter(
       config =>
         config.status === "ACTIVE" &&
@@ -27,13 +31,12 @@ export class SubscriptionEngine {
     }
 
     const previousVersion = 0;
-    const nowMs = Date.parse(input.now ?? new Date().toISOString());
     return {
       id: crypto.randomUUID(),
       subscriptionId: input.subscription.id,
       version: previousVersion + 1,
       configIds: eligible.map(config => config.id),
-      createdAt: input.now ?? new Date().toISOString()
+      createdAt: now
     };
   }
 
