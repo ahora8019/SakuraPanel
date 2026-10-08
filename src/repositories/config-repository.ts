@@ -7,6 +7,7 @@ export interface ConfigRepository {
   save(config: GeneratedConfig): Promise<void>;
   updateStatus(id: string, status: ConfigStatus, updatedAt: string): Promise<boolean>;
   getLatestVersion(configId: string): Promise<number>;
+  getVersion(configId: string, version: number): Promise<Record<string, unknown> | null>;
   saveVersion(configId: string, version: number, payload: Record<string, unknown>, createdAt: string): Promise<void>;
 }
 
@@ -84,6 +85,21 @@ export class D1ConfigRepository implements ConfigRepository {
       "UPDATE configs SET status=?, updated_at=? WHERE id=?"
     ).bind(status, updatedAt, id).run();
     return result.meta.changes > 0;
+  }
+
+  async getVersion(configId: string, version: number): Promise<Record<string, unknown> | null> {
+    const row = await this.db.prepare(
+      "SELECT payload FROM config_versions WHERE config_id=? AND version=? LIMIT 1"
+    ).bind(configId, version).first<{ payload: string }>();
+    if (!row) return null;
+    try {
+      const parsed = JSON.parse(row.payload);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : null;
+    } catch {
+      return null;
+    }
   }
 
   async getLatestVersion(configId: string): Promise<number> {
