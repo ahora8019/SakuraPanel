@@ -91,7 +91,7 @@ export default {
       }
     }
 
-    const publicSubscriptionMatch = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{43})$/);
+    const publicSubscriptionMatch = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{1,64})$/);
     if (publicSubscriptionMatch) {
       if (request.method !== "GET") {
         return Response.json({ ok: false, error: "not_found" }, {
@@ -110,6 +110,13 @@ export default {
       if (url.search.length > 2048) {
         return Response.json({ ok: false, error: "validation_failed" }, {
           status: 400,
+          headers: { "cache-control": "no-store" }
+        });
+      }
+
+      if (publicSubscriptionMatch[1].length !== 43) {
+        return Response.json({ ok: false, error: "not_found" }, {
+          status: 404,
           headers: { "cache-control": "no-store" }
         });
       }
