@@ -29,8 +29,7 @@ export interface Env {
   AUTH_SECRET: string;
   BOOTSTRAP_SECRET?: string;
   DB?: D1Database;
-  RATE_LIMIT_KV?: KVNamespace;
-  SECURITY_KV?: KVNamespace;
+    SECURITY_KV?: KVNamespace;
 }
 
 export default {
@@ -45,9 +44,9 @@ export default {
       return Response.json({ ok: false, error: "database_not_configured" }, { status: 503 });
     }
 
-    if (env.RATE_LIMIT_KV && url.pathname.startsWith("/internal/")) {
+    if (env.DB && url.pathname.startsWith("/internal/")) {
       const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
-      const decision = await new KvRateLimiter(env.RATE_LIMIT_KV).check(clientKey, 120, 60_000);
+      const decision = await new KvRateLimiter(env.DB).check(clientKey, 120, 60_000);
       if (!decision.allowed) return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), { status: 429, headers: { "content-type": "application/json", "retry-after": String(decision.retryAfterSeconds ?? 1) } });
     }
 
@@ -102,13 +101,13 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
 
     // Authentication/bootstrap endpoints are intentionally rate-limited more strictly than
     // general internal APIs because they are credential-bearing entry points.
-    if (env.RATE_LIMIT_KV && (
+    if (env.DB && (
       (url.pathname === "/owner/login" && request.method === "POST") ||
       (url.pathname === "/internal/bootstrap" && request.method === "POST") ||
       (url.pathname === "/internal/bootstrap/session" && request.method === "POST")
     )) {
       const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
-      const decision = await new KvRateLimiter(env.RATE_LIMIT_KV).check(`auth:${clientKey}`, 10, 60_000);
+      const decision = await new KvRateLimiter(env.DB).check(`auth:${clientKey}`, 10, 60_000);
       if (!decision.allowed) {
         return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), {
           status: 429,
