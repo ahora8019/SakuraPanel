@@ -13,6 +13,12 @@ export class ConfigReleaseService {
     private readonly audit?: AuditSink
   ) {}
 
+  async getConfigOwner(configId: string): Promise<string> {
+    const config = await this.configs.findById(configId);
+    if (!config) throw new Error("not_found");
+    return config.userId;
+  }
+
   async list(configId: string): Promise<ConfigRelease[]> {
     return this.releases.list(configId);
   }
