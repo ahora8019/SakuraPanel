@@ -54,7 +54,7 @@ const notFound = await request("/__sakurapanel_smoke_not_found__");
 assert(notFound.response.status === 404, "unknown route must return 404");
 assert(notFound.body?.error === "not_found", "unknown route must return safe not_found error");
 
-const invalidSubscription = await request("/s/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+const invalidSubscription = await request(`/s/${"A".repeat(43)}`);
 assert(invalidSubscription.response.status === 404, "invalid public subscription token must return 404");
 assert(invalidSubscription.body?.error === "subscription_not_found", "invalid public subscription token must not disclose data");
 
