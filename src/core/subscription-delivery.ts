@@ -27,8 +27,11 @@ export class SubscriptionDeliveryService {
 
     const nowMs = Date.parse(now);
     if (Number.isNaN(nowMs)) throw new Error("invalid_timestamp");
-    if (subscription.expiresAt && Date.parse(subscription.expiresAt) <= nowMs) {
-      throw new Error("subscription_expired");
+    if (subscription.expiresAt) {
+      const expiresMs = Date.parse(subscription.expiresAt);
+      if (Number.isNaN(expiresMs) || expiresMs <= nowMs) {
+        throw new Error("subscription_expired");
+      }
     }
 
     const version = await this.subscriptions.getLatestVersion(subscription.id);
