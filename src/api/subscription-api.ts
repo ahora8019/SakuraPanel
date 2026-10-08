@@ -92,7 +92,7 @@ function isStatusBody(value: unknown): value is { status: SubscriptionStatus } {
 
 function statusFor(error: unknown): number {
   const code = error instanceof Error ? error.message : "";
-  if (code === "forbidden") return 403;
+  if (code === "forbidden" || code === "user_not_active") return 403;
   if (code === "not_found" || code === "subscription_not_found") return 404;
   if (code === "conflict") return 409;
   if (code === "validation_failed" || code === "invalid_expiration" || code === "subscription_expired" || code === "subscription_not_active" || code === "no_eligible_configs") return 400;
