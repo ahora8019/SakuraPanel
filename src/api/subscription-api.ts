@@ -10,7 +10,7 @@ export class SubscriptionApi {
     try {
       const ctx = requirePermission(context, "subscription:read");
       const target = ctx.principal.role === "MEMBER" ? ctx.principal.userId : (userId ?? ctx.principal.userId);
-      return Response.json({ ok: true, value: await this.service.listByUserId(target) });
+      return Response.json({ ok: true, value: (await this.service.listByUserId(target)).map(toPublicSubscription) });
     } catch (error) { return errorResponse(error, statusFor(error)); }
   }
 
@@ -19,7 +19,7 @@ export class SubscriptionApi {
       const ctx = requirePermission(context, "subscription:read");
       const value = await this.service.get(id);
       if (ctx.principal.role === "MEMBER" && value.userId !== ctx.principal.userId) throw new Error("not_found");
-      return Response.json({ ok: true, value });
+      return Response.json({ ok: true, value: toPublicSubscription(value) });
     } catch (error) { return errorResponse(error, statusFor(error)); }
   }
 
@@ -31,7 +31,7 @@ export class SubscriptionApi {
       const result = await this.service.create(userId, body.expiresAt);
       return Response.json({
         ok: true,
-        value: result.subscription,
+        value: toPublicSubscription(result.subscription),
         accessToken: result.accessToken
       }, { status: 201, headers: { "cache-control": "no-store" } });
     } catch (error) { return errorResponse(error, statusFor(error)); }
@@ -45,7 +45,7 @@ export class SubscriptionApi {
       const result = await this.service.rotateAccessToken(id);
       return Response.json({
         ok: true,
-        value: result.subscription,
+        value: toPublicSubscription(result.subscription),
         accessToken: result.accessToken
       }, { headers: { "cache-control": "no-store" } });
     } catch (error) { return errorResponse(error, statusFor(error)); }
@@ -81,6 +81,17 @@ export class SubscriptionApi {
       return Response.json({ ok: true, value: await this.service.updateStatus(id, body.status) });
     } catch (error) { return errorResponse(error, statusFor(error)); }
   }
+}
+
+function toPublicSubscription(subscription: Awaited<ReturnType<SubscriptionService["get"]>>) {
+  return {
+    id: subscription.id,
+    userId: subscription.userId,
+    status: subscription.status,
+    ...(subscription.expiresAt ? { expiresAt: subscription.expiresAt } : {}),
+    createdAt: subscription.createdAt,
+    updatedAt: subscription.updatedAt
+  };
 }
 
 function isProvisionBody(value: unknown): value is {
