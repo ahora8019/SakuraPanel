@@ -79,13 +79,12 @@ export interface CompatibilityMatrixOptions {
 
 export function evaluateCompatibilityMatrix(
   config: GeneratedConfig,
-  target: CompatibilityMatrixTarget
+  target: CompatibilityMatrixTarget,
+  options: { now?: string } = {}
 ): CompatibilityMatrix {
   const metadata = config.payload.compatibility;
   const validationErrors = validateCompatibilityMetadata(metadata);
-  const generatedAt = target && typeof target === "object"
-    ? (target as { now?: string }).now ?? new Date().toISOString()
-    : new Date().toISOString();
+  const generatedAt = options.now ?? new Date().toISOString();
 
   if (validationErrors.length > 0) {
     return {
