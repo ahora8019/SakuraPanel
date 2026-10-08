@@ -72,6 +72,8 @@ export class SubscriptionService {
 
     const subscription = await this.get(subscriptionId);
     if (subscription.status !== "ACTIVE") throw new Error("subscription_not_active");
+    const nowMs = Date.parse(now);
+    if (Number.isNaN(nowMs)) throw new Error("invalid_timestamp");
     if (subscription.expiresAt) {
       const expiresMs = Date.parse(subscription.expiresAt);
       if (Number.isNaN(expiresMs) || expiresMs <= nowMs) throw new Error("subscription_expired");
