@@ -92,26 +92,63 @@ export default {
     }
 
     const publicSubscriptionMatch = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{43})$/);
-    if (env.DB && publicSubscriptionMatch && request.method === "GET") {
-      const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
-      const decision = await new KvRateLimiter(env.DB).check(`public:${clientKey}`, 60, 60_000);
-      if (!decision.allowed) {
-        return Response.json({ ok: false, error: "rate_limited" }, {
-          status: 429,
-          headers: {
-            "retry-after": String(decision.retryAfterSeconds ?? 1),
-            "cache-control": "no-store"
-          }
+    if (publicSubscriptionMatch) {
+      if (request.method !== "GET") {
+        return Response.json({ ok: false, error: "not_found" }, {
+          status: 404,
+          headers: { "cache-control": "no-store" }
         });
       }
 
-      const publicSubscriptionApi = new PublicSubscriptionApi(
-        new SubscriptionDeliveryService(
-          new D1SubscriptionRepository(env.DB),
-          new D1ConfigRepository(env.DB)
-        )
-      );
-      return publicSubscriptionApi.get(publicSubscriptionMatch[1], url.searchParams);
+      if (!env.DB) {
+        return Response.json({ ok: false, error: "service_not_configured" }, {
+          status: 503,
+          headers: { "cache-control": "no-store", "retry-after": "5" }
+        });
+      }
+
+      if (url.search.length > 2048) {
+        return Response.json({ ok: false, error: "validation_failed" }, {
+          status: 400,
+          headers: { "cache-control": "no-store" }
+        });
+      }
+
+      const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
+      try {
+        const decision = await new KvRateLimiter(env.DB).check(`public:${clientKey}`, 60, 60_000);
+        if (!decision.allowed) {
+          return Response.json({ ok: false, error: "rate_limited" }, {
+            status: 429,
+            headers: {
+              "cache-control": "no-store",
+              "retry-after": String(decision.retryAfterSeconds ?? 1),
+              "x-ratelimit-limit": "60",
+              "x-ratelimit-remaining": "0"
+            }
+          });
+        }
+
+        const publicSubscriptionApi = new PublicSubscriptionApi(
+          new SubscriptionDeliveryService(
+            new D1SubscriptionRepository(env.DB),
+            new D1ConfigRepository(env.DB)
+          )
+        );
+        const response = await publicSubscriptionApi.get(publicSubscriptionMatch[1], url.searchParams);
+        response.headers.set("x-ratelimit-limit", "60");
+        response.headers.set("x-ratelimit-remaining", String(decision.remaining));
+        return response;
+      } catch (error) {
+        console.error(JSON.stringify({
+          event: "public_subscription_failure",
+          code: error instanceof Error ? error.message : "unknown_error"
+        }));
+        return Response.json({ ok: false, error: "service_unavailable" }, {
+          status: 503,
+          headers: { "cache-control": "no-store", "retry-after": "5" }
+        });
+      }
     }
 
     if (!env.AUTH_SECRET) {
