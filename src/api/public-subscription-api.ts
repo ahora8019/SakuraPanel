@@ -24,7 +24,9 @@ export class PublicSubscriptionApi {
       }, {
         headers: {
           "cache-control": "private, no-store",
-          "x-content-type-options": "nosniff"
+          "x-content-type-options": "nosniff",
+          "referrer-policy": "no-referrer",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
         }
       });
     } catch (error) {
