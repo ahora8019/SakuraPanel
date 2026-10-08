@@ -2,6 +2,7 @@ import type { Subscription, SubscriptionVersion } from "../models/subscription";
 
 export interface SubscriptionRepository {
   findById(id: string): Promise<Subscription | null>;
+  findByPublicTokenHash(tokenHash: string): Promise<Subscription | null>;
   listByUserId(userId: string): Promise<Subscription[]>;
   create(subscription: Subscription): Promise<void>;
   updateStatus(id: string, status: Subscription["status"], updatedAt: string): Promise<boolean>;
@@ -49,6 +50,13 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
     return row ? mapSubscription(row) : null;
   }
 
+  async findByPublicTokenHash(tokenHash: string): Promise<Subscription | null> {
+    const row = await this.db.prepare(
+      "SELECT id, user_id, status, expires_at, created_at, updated_at FROM subscriptions WHERE public_token_hash = ? LIMIT 1"
+    ).bind(tokenHash).first<Record<string, unknown>>();
+    return row ? mapSubscription(row) : null;
+  }
+
   async listByUserId(userId: string): Promise<Subscription[]> {
     const result = await this.db.prepare(
       "SELECT id, user_id, status, expires_at, created_at, updated_at FROM subscriptions WHERE user_id = ? ORDER BY created_at DESC"
@@ -58,10 +66,11 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
 
   async create(subscription: Subscription): Promise<void> {
     await this.db.prepare(
-      "INSERT INTO subscriptions (id,user_id,status,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?)"
+      "INSERT INTO subscriptions (id,user_id,status,expires_at,created_at,updated_at,public_token_hash) VALUES (?,?,?,?,?,?,?)"
     ).bind(
       subscription.id, subscription.userId, subscription.status,
-      subscription.expiresAt ?? null, subscription.createdAt, subscription.updatedAt
+      subscription.expiresAt ?? null, subscription.createdAt, subscription.updatedAt,
+      subscription.publicTokenHash ?? null
     ).run();
   }
 
