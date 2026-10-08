@@ -43,6 +43,24 @@ export class SubscriptionService {
     return { subscription, accessToken };
   }
 
+  async rotateAccessToken(id: string, now = new Date().toISOString()): Promise<{ subscription: Subscription; accessToken: string }> {
+    const subscription = await this.get(id);
+    const nowMs = Date.parse(now);
+    if (Number.isNaN(nowMs)) throw new Error("invalid_timestamp");
+    if (subscription.expiresAt && Date.parse(subscription.expiresAt) <= nowMs) {
+      throw new Error("subscription_expired");
+    }
+
+    const accessToken = generateSubscriptionToken();
+    const publicTokenHash = await hashSubscriptionToken(accessToken);
+    if (!(await this.repository.updatePublicTokenHash(id, publicTokenHash, now))) {
+      throw new Error("subscription_not_found");
+    }
+
+    const updated = await this.get(id);
+    return { subscription: updated, accessToken };
+  }
+
   async get(id: string): Promise<Subscription> {
     const subscription = await this.repository.findById(id);
     if (!subscription) throw new Error("subscription_not_found");
