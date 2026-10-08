@@ -1,5 +1,12 @@
 {
   "name": "sakurapanel",
   "main": "src/index.ts",
-  "compatibility_date": "2026-10-06"
+  "compatibility_date": "2026-10-06",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "sakurapanel",
+      "database_id": "db7c0fc3-7e65-49c7-8005-a23fd9adbbfb"
+    }
+  ]
 }
