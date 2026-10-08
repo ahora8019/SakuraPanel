@@ -188,11 +188,16 @@ export class AuthService {
 
   static extractBearer(request: Request): string | null {
     const value = request.headers.get("Authorization");
-    if (!value) return null;
+    if (value) {
+      const [scheme, token, ...extra] = value.trim().split(/\s+/);
+      if (scheme?.toLowerCase() === "bearer" && token && extra.length === 0) {
+        return token;
+      }
+    }
 
-    const [scheme, token, ...extra] = value.trim().split(/\s+/);
-    return scheme?.toLowerCase() === "bearer" && token && extra.length === 0
-      ? token
-      : null;
+    const cookie = request.headers.get("Cookie");
+    if (!cookie) return null;
+    const match = cookie.split(";").map(part => part.trim()).find(part => part.startsWith("sp_session="));
+    return match ? decodeURIComponent(match.slice("sp_session=".length)) : null;
   }
 }
