@@ -7,6 +7,8 @@ export interface Subscription {
   userId: ID;
   status: SubscriptionStatus;
   expiresAt?: ISODateString;
+  /** Internal storage only; never expose this hash to API clients. */
+  publicTokenHash?: string;
   createdAt: ISODateString;
   updatedAt: ISODateString;
 }
