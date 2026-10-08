@@ -27,6 +27,7 @@ No VPS/endpoint architecture is planned for the current Cloudflare-native editio
 - Audit Timeline
 - Backup/restore procedures
 - Config release tracking
+- Published-version delivery isolation
 
 ### Security
 - RBAC and ownership isolation
@@ -43,6 +44,7 @@ No VPS/endpoint architecture is planned for the current Cloudflare-native editio
 - CI typecheck + tests
 - D1 migration gate
 - Production smoke tests
+- Config release migration + CI/deploy verification
 - Deployment health checks
 - Workers version rollback procedure
 - Preview environments with isolated D1/secrets
@@ -95,11 +97,11 @@ Already implemented or substantially present:
 - Production deployment through GitHub Actions
 
 Next implementation batch:
-1. Observability configuration
-2. Readiness/diagnostics API
-3. Production smoke tests
-4. Config release/rollback APIs
-5. Subscription diagnostics
+1. Subscription diagnostics
+2. Client compatibility metadata
+3. Audit timeline API
+4. Backup/restore runbook
+5. Preview environment
 6. Client compatibility metadata
 7. Audit timeline API
 8. Backup/restore runbook
