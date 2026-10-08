@@ -5,6 +5,7 @@ import { validateGeneratedConfig } from "./config-validation";
 import { EndpointService } from "./endpoint-service";
 import type { TemplateRepository } from "../repositories/template-repository";
 import type { DeviceRepository } from "../repositories/device-repository";
+import type { UserRepository } from "../repositories/user-repository";
 
 export class ConfigService {
   constructor(
@@ -12,7 +13,8 @@ export class ConfigService {
     private readonly endpoints: EndpointService,
     private readonly templates: TemplateRepository,
     private readonly engine = new ConfigEngine(),
-    private readonly devices?: DeviceRepository
+    private readonly devices?: DeviceRepository,
+    private readonly users?: UserRepository
   ) {}
 
   async generate(input: {
@@ -25,6 +27,11 @@ export class ConfigService {
     now?: string;
   }): Promise<GeneratedConfig> {
     if (input.endpointId && input.region) throw new Error("conflicting_endpoint_selection");
+    if (!input.identity.userId || !input.templateId) throw new Error("validation_failed");
+    if (this.users) {
+      const user = await this.users.findById(input.identity.userId);
+      if (!user || user.status !== "ACTIVE") throw new Error("user_not_active");
+    }
     const now = input.now ?? new Date().toISOString();
     if (input.expiresAt && Date.parse(input.expiresAt) <= Date.parse(now)) {
       throw new Error("invalid_expiration");
@@ -34,6 +41,7 @@ export class ConfigService {
     if (input.endpointId) {
       endpointResult = await this.endpoints.get(input.endpointId);
       if (!endpointResult.ok) throw new Error(endpointResult.error);
+      if (endpointResult.value.status === "DEGRADED" && input.allowDegraded !== true) throw new Error("endpoint_not_eligible");
     } else {
       const selected = await this.endpoints.select({
         region: input.region,
