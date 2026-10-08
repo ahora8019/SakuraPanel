@@ -2,6 +2,8 @@ import type { Role } from "./roles";
 
 export const PERMISSIONS = [
   "endpoint:read",
+  "device:read",
+  "device:write",
   "endpoint:write",
   "config:read",
   "config:write",
@@ -20,6 +22,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ADMIN: [
     "endpoint:read",
     "endpoint:write",
+    "device:read",
+    "device:write",
     "config:read",
     "config:write",
     "subscription:read",
@@ -29,6 +33,8 @@ const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   ],
   MEMBER: [
     "endpoint:read",
+    "device:read",
+    "device:write",
     "config:read",
     "subscription:read"
   ]
