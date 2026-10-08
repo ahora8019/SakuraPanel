@@ -308,6 +308,14 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       }
 
       const username = ((body as Record<string, unknown>).username as string).trim();
+
+      // Bootstrap session is a one-time recovery path. Once any user exists,
+      // the bootstrap secret must never be accepted as an authentication path.
+      const existingUsers = await env.DB!.prepare("SELECT 1 AS present FROM users LIMIT 1").first<{ present: number }>();
+      if (existingUsers) {
+        return Response.json({ ok: false, error: "bootstrap_already_completed" }, { status: 409 });
+      }
+
       const owner = await env.DB!.prepare(
         "SELECT id, username, role, status, security_version FROM users WHERE username = ? AND role = 'OWNER' LIMIT 1"
       ).bind(username).first<{id:string;username:string;role:"OWNER";status:"ACTIVE";security_version:number}>();
