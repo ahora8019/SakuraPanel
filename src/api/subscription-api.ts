@@ -28,8 +28,12 @@ export class SubscriptionApi {
       const ctx = requirePermission(context, "subscription:write");
       if (!isCreateBody(body)) throw new Error("validation_failed");
       const userId = ctx.principal.role === "MEMBER" ? ctx.principal.userId : body.userId;
-      const value = await this.service.create(userId, body.expiresAt);
-      return Response.json({ ok: true, value }, { status: 201 });
+      const result = await this.service.create(userId, body.expiresAt);
+      return Response.json({
+        ok: true,
+        value: result.subscription,
+        accessToken: result.accessToken
+      }, { status: 201, headers: { "cache-control": "no-store" } });
     } catch (error) { return errorResponse(error, statusFor(error)); }
   }
 
