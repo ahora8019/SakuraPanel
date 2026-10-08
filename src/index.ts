@@ -1,8 +1,5 @@
 import { AuthService } from "./security/auth";
 import { authenticateRequest } from "./security/security-middleware";
-import { EndpointApi } from "./api/endpoint-api";
-import { EndpointService } from "./core/endpoint-service";
-import { D1EndpointRepository } from "./repositories/endpoint-repository";
 import { UserApi } from "./api/user-api";
 import { DeviceApi } from "./api/device-api";
 import { ConfigApi } from "./api/config-api";
@@ -18,10 +15,8 @@ import { D1DeviceRepository } from "./repositories/device-repository";
 import { SubscriptionApi } from "./api/subscription-api";
 import { SubscriptionService } from "./core/subscription-service";
 import { D1SubscriptionRepository } from "./repositories/subscription-repository";
-import type { Endpoint } from "./models/endpoint";
 import { KvRateLimiter } from "./security/kv-rate-limit";
 import { EmergencyLock } from "./security/emergency-lock";
-import { HealthApi } from "./api/health-api";
 import { D1SessionRepository } from "./repositories/session-repository";
 import { ownerDashboardResponse } from "./ui/owner-dashboard";
 import { cleanupRateLimitBuckets } from "./security/rate-limit-cleanup";
@@ -53,12 +48,20 @@ export default {
     if (env.DB && url.pathname.startsWith("/internal/")) {
       const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
       const decision = await new KvRateLimiter(env.DB).check(clientKey, 120, 60_000);
-      if (!decision.allowed) return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), { status: 429, headers: { "content-type": "application/json", "retry-after": String(decision.retryAfterSeconds ?? 1) } });
+      if (!decision.allowed) {
+        return Response.json(
+          { ok: false, error: "rate_limited" },
+          { status: 429, headers: { "retry-after": String(decision.retryAfterSeconds ?? 1), "cache-control": "no-store" } }
+        );
+      }
     }
 
     if (env.SECURITY_KV) {
-      try { await new EmergencyLock(env.SECURITY_KV).assertUnlocked(); }
-      catch { return Response.json({ ok: false, error: "emergency_lock_active" }, { status: 503 }); }
+      try {
+        await new EmergencyLock(env.SECURITY_KV).assertUnlocked();
+      } catch {
+        return Response.json({ ok: false, error: "emergency_lock_active" }, { status: 503 });
+      }
     }
 
     if (!env.AUTH_SECRET) {
@@ -67,8 +70,6 @@ export default {
 
     const auth = new AuthService(env.AUTH_SECRET);
 
-    // Minimal HTTPS bootstrap UI for phone-only setup. It never puts the bootstrap
-    // credential in the URL and never sends it anywhere except the same Worker.
     if (url.pathname === "/bootstrap" && request.method === "GET") {
       return new Response(`<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -84,29 +85,25 @@ button{background:#e85d9e;border:0;font-weight:700}pre{white-space:pre-wrap;word
 <input id="u" value="ahora_8019" autocomplete="username" required>
 <input id="s" type="password" placeholder="Bootstrap secret" autocomplete="off" required>
 <button>Create OWNER</button>
-</form>
-<pre id="out"></pre>
+</form><pre id="out"></pre>
 <script>
 document.getElementById("f").addEventListener("submit",async(e)=>{
- e.preventDefault();
- const out=document.getElementById("out"); out.textContent="Working...";
+ e.preventDefault(); const out=document.getElementById("out"); out.textContent="Working...";
  try{
   const r=await fetch("/internal/bootstrap",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:new URLSearchParams({username:document.getElementById("u").value,bootstrapSecret:document.getElementById("s").value})});
-  const j=await r.json();
-  if(j?.value?.token) j.value.token="TOKEN_CREATED_IN_BROWSER_DO_NOT_SHARE";
+  const j=await r.json(); if(j?.value?.token) j.value.token="TOKEN_CREATED_IN_BROWSER_DO_NOT_SHARE";
   out.textContent=JSON.stringify({status:r.status,...j},null,2);
  }catch(err){out.textContent=String(err)}
 });
-</script></body></html>`, { headers: { "content-type": "text/html; charset=UTF-8", "cache-control": "no-store" } });
+</script></body></html>`, {
+        headers: { "content-type": "text/html; charset=UTF-8", "cache-control": "no-store" }
+      });
     }
-
 
     if (url.pathname === "/owner" && request.method === "GET") {
       return ownerDashboardResponse();
     }
 
-    // Authentication/bootstrap endpoints are intentionally rate-limited more strictly than
-    // general internal APIs because they are credential-bearing entry points.
     if (env.DB && (
       (url.pathname === "/owner/login" && request.method === "POST") ||
       (url.pathname === "/internal/bootstrap" && request.method === "POST") ||
@@ -117,11 +114,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       if (!decision.allowed) {
         return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), {
           status: 429,
-          headers: {
-            "content-type": "application/json",
-            "retry-after": String(decision.retryAfterSeconds ?? 1),
-            "cache-control": "no-store"
-          }
+          headers: { "content-type": "application/json", "retry-after": String(decision.retryAfterSeconds ?? 1), "cache-control": "no-store" }
         });
       }
     }
@@ -131,7 +124,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       const token = AuthService.extractBearer(request);
       if (token) {
         const principal = await auth.verifyToken(token);
-        if (principal) await new D1SessionRepository(env.DB!).revoke(principal.sessionId, new Date().toISOString());
+        if (principal) await new D1SessionRepository(env.DB).revoke(principal.sessionId, new Date().toISOString());
       }
       return new Response(null, {
         status: 303,
@@ -144,44 +137,31 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     }
 
     if (url.pathname === "/owner/login" && request.method === "POST") {
-      if (!env.DB || !env.BOOTSTRAP_SECRET) {
-        return new Response("Service not configured", { status: 503 });
-      }
+      if (!env.DB || !env.BOOTSTRAP_SECRET) return new Response("Service not configured", { status: 503 });
 
       let form: FormData;
-      try {
-        form = await request.formData();
-      } catch {
-        return new Response("Invalid request", { status: 400 });
-      }
+      try { form = await request.formData(); }
+      catch { return new Response("Invalid request", { status: 400 }); }
 
       const username = String(form.get("username") ?? "").trim();
       const bootstrapSecret = String(form.get("bootstrapSecret") ?? "");
-      if (!username || bootstrapSecret !== env.BOOTSTRAP_SECRET) {
-        return new Response("Unauthorized", { status: 401 });
-      }
+      if (!username || bootstrapSecret !== env.BOOTSTRAP_SECRET) return new Response("Unauthorized", { status: 401 });
 
-      const owner = await env.DB!.prepare(
+      const owner = await env.DB.prepare(
         "SELECT id, username, role, status, security_version FROM users WHERE username = ? AND role = 'OWNER' LIMIT 1"
       ).bind(username).first<{id:string;username:string;role:"OWNER";status:"ACTIVE";security_version:number}>();
 
-      if (!owner || owner.status !== "ACTIVE") {
-        return new Response("Owner not available", { status: 403 });
-      }
+      if (!owner || owner.status !== "ACTIVE") return new Response("Owner not available", { status: 403 });
 
       const now = new Date();
       const nowIso = now.toISOString();
       const expires = new Date(now.getTime() + 60 * 60 * 1000);
       const sessionId = crypto.randomUUID();
       const token = await auth.issueToken({
-        userId: owner.id,
-        role: "OWNER",
-        sessionId,
-        tokenVersion: 1,
-        securityVersion: owner.security_version
+        userId: owner.id, role: "OWNER", sessionId, tokenVersion: 1, securityVersion: owner.security_version
       }, 3600, Math.floor(now.getTime() / 1000));
 
-      await env.DB!.prepare(
+      await env.DB.prepare(
         "INSERT INTO auth_sessions (id, user_id, token_version, created_at, expires_at, revoked_at, last_seen_at) VALUES (?, ?, ?, ?, ?, NULL, ?)"
       ).bind(sessionId, owner.id, 1, nowIso, expires.toISOString(), nowIso).run();
 
@@ -195,32 +175,20 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       });
     }
 
-    // One-time production bootstrap: creates the first OWNER only when the database has no users.
-    // It uses a separate secret so AUTH_SECRET never doubles as a bootstrap credential.
     if (url.pathname === "/internal/bootstrap" && request.method === "POST") {
-      if (!env.DB || !env.BOOTSTRAP_SECRET) {
-        return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
-      }
+      if (!env.DB || !env.BOOTSTRAP_SECRET) return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
 
-      const existing = await env.DB!.prepare("SELECT COUNT(*) AS count FROM users").first<{ count: number }>();
-      if ((existing?.count ?? 0) > 0) {
-        return Response.json({ ok: false, error: "bootstrap_already_completed" }, { status: 409 });
-      }
+      const existing = await env.DB.prepare("SELECT COUNT(*) AS count FROM users").first<{ count: number }>();
+      if ((existing?.count ?? 0) > 0) return Response.json({ ok: false, error: "bootstrap_already_completed" }, { status: 409 });
 
       let body: unknown;
       try {
         const contentType = request.headers.get("content-type") ?? "";
-        if (contentType.includes("application/json")) {
-          body = await request.json();
-        } else if (contentType.includes("application/x-www-form-urlencoded")) {
+        if (contentType.includes("application/json")) body = await request.json();
+        else if (contentType.includes("application/x-www-form-urlencoded")) {
           const form = await request.formData();
-          body = {
-            username: form.get("username"),
-            bootstrapSecret: form.get("bootstrapSecret")
-          };
-        } else {
-          return Response.json({ ok: false, error: "invalid_content_type" }, { status: 415 });
-        }
+          body = { username: form.get("username"), bootstrapSecret: form.get("bootstrapSecret") };
+        } else return Response.json({ ok: false, error: "invalid_content_type" }, { status: 415 });
       } catch {
         return Response.json({ ok: false, error: "invalid_request" }, { status: 400 });
       }
@@ -244,35 +212,19 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       const nowIso = now.toISOString();
       const userId = crypto.randomUUID();
       const sessionId = crypto.randomUUID();
-      const expires = new Date(now.getTime() + 60 * 60 * 1000);
-      const expiresIso = expires.toISOString();
-
-      const user = {
-        id: userId,
-        username,
-        role: "OWNER",
-        status: "ACTIVE",
-        securityVersion: 1,
-        createdAt: nowIso,
-        updatedAt: nowIso
-      };
+      const expiresIso = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
+      const user = { id: userId, username, role: "OWNER", status: "ACTIVE", securityVersion: 1, createdAt: nowIso, updatedAt: nowIso };
 
       const token = await auth.issueToken({
-        userId,
-        role: "OWNER",
-        sessionId,
-        tokenVersion: 1,
-        securityVersion: 1
+        userId, role: "OWNER", sessionId, tokenVersion: 1, securityVersion: 1
       }, 3600, Math.floor(now.getTime() / 1000));
 
       try {
-        await env.DB!.batch([
-          env.DB!.prepare(
-            "INSERT INTO users (id, username, role, status, security_version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-          ).bind(userId, username, "OWNER", "ACTIVE", 1, nowIso, nowIso),
-          env.DB!.prepare(
-            "INSERT INTO auth_sessions (id, user_id, token_version, created_at, expires_at, revoked_at, last_seen_at) VALUES (?, ?, ?, ?, ?, NULL, ?)"
-          ).bind(sessionId, userId, 1, nowIso, expiresIso, nowIso)
+        await env.DB.batch([
+          env.DB.prepare("INSERT INTO users (id, username, role, status, security_version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+            .bind(userId, username, "OWNER", "ACTIVE", 1, nowIso, nowIso),
+          env.DB.prepare("INSERT INTO auth_sessions (id, user_id, token_version, created_at, expires_at, revoked_at, last_seen_at) VALUES (?, ?, ?, ?, ?, NULL, ?)")
+            .bind(sessionId, userId, 1, nowIso, expiresIso, nowIso)
         ]);
       } catch (error) {
         const message = error instanceof Error ? error.message.toLowerCase() : "";
@@ -282,21 +234,11 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
         throw error;
       }
 
-      return Response.json({
-        ok: true,
-        value: {
-          user,
-          session: { expiresAt: expiresIso },
-          token
-        }
-      }, { status: 201 });
+      return Response.json({ ok: true, value: { user, session: { expiresAt: expiresIso }, token } }, { status: 201 });
     }
 
-
     if (url.pathname === "/internal/bootstrap/session" && request.method === "POST") {
-      if (!env.DB || !env.BOOTSTRAP_SECRET) {
-        return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
-      }
+      if (!env.DB || !env.BOOTSTRAP_SECRET) return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
 
       let body: unknown;
       try {
@@ -321,210 +263,143 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       }
 
       const username = ((body as Record<string, unknown>).username as string).trim();
+      const existingUsers = await env.DB.prepare("SELECT 1 AS present FROM users LIMIT 1").first<{ present: number }>();
+      if (existingUsers) return Response.json({ ok: false, error: "bootstrap_already_completed" }, { status: 409 });
 
-      // Bootstrap session is a one-time recovery path. Once any user exists,
-      // the bootstrap secret must never be accepted as an authentication path.
-      const existingUsers = await env.DB!.prepare("SELECT 1 AS present FROM users LIMIT 1").first<{ present: number }>();
-      if (existingUsers) {
-        return Response.json({ ok: false, error: "bootstrap_already_completed" }, { status: 409 });
-      }
-
-      const owner = await env.DB!.prepare(
+      const owner = await env.DB.prepare(
         "SELECT id, username, role, status, security_version FROM users WHERE username = ? AND role = 'OWNER' LIMIT 1"
       ).bind(username).first<{id:string;username:string;role:"OWNER";status:"ACTIVE";security_version:number}>();
 
-      if (!owner || owner.status !== "ACTIVE") {
-        return Response.json({ ok: false, error: "owner_not_available" }, { status: 403 });
-      }
+      if (!owner || owner.status !== "ACTIVE") return Response.json({ ok: false, error: "owner_not_available" }, { status: 403 });
 
       const now = new Date();
       const nowIso = now.toISOString();
-      const expires = new Date(now.getTime() + 60 * 60 * 1000);
+      const expiresIso = new Date(now.getTime() + 60 * 60 * 1000).toISOString();
       const sessionId = crypto.randomUUID();
       const token = await auth.issueToken({
-        userId: owner.id,
-        role: "OWNER",
-        sessionId,
-        tokenVersion: 1,
-        securityVersion: owner.security_version
+        userId: owner.id, role: "OWNER", sessionId, tokenVersion: 1, securityVersion: owner.security_version
       }, 3600, Math.floor(now.getTime() / 1000));
 
-      await env.DB!.prepare(
+      await env.DB.prepare(
         "INSERT INTO auth_sessions (id, user_id, token_version, created_at, expires_at, revoked_at, last_seen_at) VALUES (?, ?, ?, ?, ?, NULL, ?)"
-      ).bind(sessionId, owner.id, 1, nowIso, expires.toISOString(), nowIso).run();
+      ).bind(sessionId, owner.id, 1, nowIso, expiresIso, nowIso).run();
 
-      return Response.json({ok:true,value:{user:{id:owner.id,username:owner.username,role:owner.role},session:{expiresAt:expires.toISOString()},token}}, {status:201});
+      return Response.json({
+        ok: true,
+        value: { user: { id: owner.id, username: owner.username, role: owner.role }, session: { expiresAt: expiresIso }, token }
+      }, { status: 201 });
     }
 
     const context = await authenticateRequest(request, auth, env.DB);
-    const endpointService = new EndpointService(new D1EndpointRepository(env.DB!));
-    const endpointApi = new EndpointApi(endpointService);
-    const templateRepository = new D1TemplateRepository(env.DB!);
-    const templateService = new TemplateService(templateRepository);
-    const templateApi = new TemplateApi(templateService);
-    const deviceRepository = new D1DeviceRepository(env.DB!);
     const userRepository = new D1UserRepository(env.DB!);
-    const configService = new ConfigService(new D1ConfigRepository(env.DB!), endpointService, templateRepository, undefined, deviceRepository, userRepository);
-    const configApi = new ConfigApi(configService);
+    const deviceRepository = new D1DeviceRepository(env.DB!);
+    const templateRepository = new D1TemplateRepository(env.DB!);
+    const configRepository = new D1ConfigRepository(env.DB!);
     const subscriptionRepository = new D1SubscriptionRepository(env.DB!);
+
+    const userService = new UserService(userRepository);
+    const deviceService = new DeviceService(deviceRepository, userRepository);
+    const templateService = new TemplateService(templateRepository);
+    const configService = new ConfigService(configRepository, templateRepository, undefined, deviceRepository, userRepository);
     const subscriptionService = new SubscriptionService(
-      subscriptionRepository,
-      new D1ConfigRepository(env.DB!),
-      endpointService,
-      configService,
-      undefined,
-      userRepository
+      subscriptionRepository, configRepository, configService, userRepository
     );
+
+    const userApi = new UserApi(userService);
+    const deviceApi = new DeviceApi(deviceService);
+    const templateApi = new TemplateApi(templateService);
+    const configApi = new ConfigApi(configService);
     const subscriptionApi = new SubscriptionApi(subscriptionService);
-    const healthApi = new HealthApi(endpointService);
 
-    const endpointHealthMatch = url.pathname.match(/^\/internal\/endpoints\/([^/]+)\/health$/);
-    if (endpointHealthMatch && request.method === "POST") {
-      let body: unknown;
-      try { body = await request.json(); }
-      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return healthApi.observe(context, decodeURIComponent(endpointHealthMatch[1]), body);
-    }
-
-    if (url.pathname === "/internal/endpoints") {
-      if (request.method === "GET") {
-        return endpointApi.list(context, url.searchParams.get("region") ?? undefined);
-      }
-
-      if (request.method === "POST") {
-        let endpoint: Endpoint;
-        try {
-          endpoint = await request.json<Endpoint>();
-        } catch {
-          return Response.json({ ok: false, error: "invalid_json" }, { status: 400 });
-        }
-        return endpointApi.create(context, endpoint);
-      }
-    }
-
-    if (url.pathname === "/internal/templates" && request.method === "GET") {
-      return templateApi.list(context);
-    }
-
+    if (url.pathname === "/internal/templates" && request.method === "GET") return templateApi.list(context);
     if (url.pathname === "/internal/templates" && request.method === "POST") {
       let body: unknown;
-      try { body = await request.json(); }
-      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       return templateApi.create(context, body);
     }
 
     const templateStatusMatch = url.pathname.match(/^\/internal\/templates\/([^/]+)\/status$/);
     if (templateStatusMatch && request.method === "PATCH") {
       let body: unknown;
-      try { body = await request.json(); }
-      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       return templateApi.updateStatus(context, decodeURIComponent(templateStatusMatch[1]), body);
-    }
-
-    if (url.pathname === "/internal/subscriptions" && request.method === "GET") {
-      return subscriptionApi.list(context, url.searchParams.get("userId") ?? undefined);
-    }
-
-    if (url.pathname === "/internal/subscriptions" && request.method === "POST") {
-      let body: unknown;
-      try { body = await request.json(); }
-      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return subscriptionApi.create(context, body);
-    }
-
-    const subscriptionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)$/);
-    if (subscriptionMatch && request.method === "GET") {
-      return subscriptionApi.get(context, decodeURIComponent(subscriptionMatch[1]));
-    }
-
-    const subscriptionProvisionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/provision$/);
-    if (subscriptionProvisionMatch && request.method === "POST") {
-      let body: unknown;
-      try { body = await request.json(); }
-      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return subscriptionApi.provision(context, decodeURIComponent(subscriptionProvisionMatch[1]), body);
-    }
-
-    const subscriptionRebuildMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/rebuild$/);
-    if (subscriptionRebuildMatch && request.method === "POST") {
-      return subscriptionApi.rebuild(context, decodeURIComponent(subscriptionRebuildMatch[1]));
-    }
-
-    const subscriptionStatusMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/status$/);
-    if (subscriptionStatusMatch && request.method === "PATCH") {
-      let body: unknown;
-      try { body = await request.json(); }
-      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return subscriptionApi.updateStatus(context, decodeURIComponent(subscriptionStatusMatch[1]), body);
     }
 
     if (url.pathname === "/internal/configs" && request.method === "GET") {
       return configApi.list(context, url.searchParams.get("userId") ?? undefined);
     }
-
     if (url.pathname === "/internal/configs" && request.method === "POST") {
       let body: unknown;
-      try { body = await request.json(); }
-      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       return configApi.generate(context, body);
     }
 
     const configMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)$/);
-    if (configMatch && request.method === "GET") {
-      return configApi.get(context, decodeURIComponent(configMatch[1]));
-    }
+    if (configMatch && request.method === "GET") return configApi.get(context, decodeURIComponent(configMatch[1]));
 
     const configStatusMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/status$/);
     if (configStatusMatch && request.method === "PATCH") {
       let body: unknown;
-      try { body = await request.json(); }
-      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       return configApi.updateStatus(context, decodeURIComponent(configStatusMatch[1]), body);
     }
-    const userService = new UserService(userRepository);
-    const deviceService = new DeviceService(
-      deviceRepository,
-      userRepository
-    );
-    const userApi = new UserApi(userService);
-    const deviceApi = new DeviceApi(deviceService);
 
-    if (url.pathname === "/internal/users" && request.method === "GET") {
-      return userApi.list(context);
+    if (url.pathname === "/internal/subscriptions" && request.method === "GET") {
+      return subscriptionApi.list(context, url.searchParams.get("userId") ?? undefined);
+    }
+    if (url.pathname === "/internal/subscriptions" && request.method === "POST") {
+      let body: unknown;
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return subscriptionApi.create(context, body);
     }
 
+    const subscriptionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)$/);
+    if (subscriptionMatch && request.method === "GET") return subscriptionApi.get(context, decodeURIComponent(subscriptionMatch[1]));
+
+    const subscriptionProvisionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/provision$/);
+    if (subscriptionProvisionMatch && request.method === "POST") {
+      let body: unknown;
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return subscriptionApi.provision(context, decodeURIComponent(subscriptionProvisionMatch[1]), body);
+    }
+
+    const subscriptionRebuildMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/rebuild$/);
+    if (subscriptionRebuildMatch && request.method === "POST") return subscriptionApi.rebuild(context, decodeURIComponent(subscriptionRebuildMatch[1]));
+
+    const subscriptionStatusMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/status$/);
+    if (subscriptionStatusMatch && request.method === "PATCH") {
+      let body: unknown;
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return subscriptionApi.updateStatus(context, decodeURIComponent(subscriptionStatusMatch[1]), body);
+    }
+
+    if (url.pathname === "/internal/users" && request.method === "GET") return userApi.list(context);
     if (url.pathname === "/internal/users" && request.method === "POST") {
       let body: unknown;
-      try { body = await request.json(); }
-      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       return userApi.create(context, body);
     }
 
     const userStatusMatch = url.pathname.match(/^\/internal\/users\/([^/]+)\/status$/);
     if (userStatusMatch && request.method === "PATCH") {
       let body: unknown;
-      try { body = await request.json(); }
-      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       return userApi.updateStatus(context, decodeURIComponent(userStatusMatch[1]), body);
     }
 
     const userDevicesMatch = url.pathname.match(/^\/internal\/users\/([^/]+)\/devices$/);
-    if (userDevicesMatch && request.method === "GET") {
-      return deviceApi.list(context, decodeURIComponent(userDevicesMatch[1]));
-    }
+    if (userDevicesMatch && request.method === "GET") return deviceApi.list(context, decodeURIComponent(userDevicesMatch[1]));
 
     if (url.pathname === "/internal/devices" && request.method === "POST") {
       let body: unknown;
-      try { body = await request.json(); }
-      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       return deviceApi.create(context, body);
     }
 
     const deviceStatusMatch = url.pathname.match(/^\/internal\/devices\/([^/]+)\/status$/);
     if (deviceStatusMatch && request.method === "PATCH") {
       let body: unknown;
-      try { body = await request.json(); }
-      catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       return deviceApi.updateStatus(context, decodeURIComponent(deviceStatusMatch[1]), body);
     }
 
