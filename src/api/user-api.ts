@@ -14,7 +14,7 @@ export class UserApi {
 
   async create(context: SecurityContext | null, body: unknown): Promise<Response> {
     try {
-      requirePermission(context, "user:write");
+      const ctx = requirePermission(context, "user:write");
       if (!isCreateBody(body)) throw new Error("validation_failed");
       const value = await this.service.create({ username: body.username, role: body.role, actorRole: ctx.principal.role, now: new Date().toISOString() });
       return Response.json({ ok: true, value }, { status: 201 });
