@@ -28,6 +28,8 @@ import { DiagnosticsApi } from "./api/diagnostics-api";
 import { ConfigReleaseService } from "./core/config-release-service";
 import { D1ConfigReleaseRepository } from "./repositories/config-release-repository";
 import { D1AuditRepository } from "./repositories/audit-repository";
+import { SubscriptionDiagnosticsService } from "./core/subscription-diagnostics";
+import { SubscriptionDiagnosticsApi } from "./api/subscription-diagnostics-api";
 
 import type { Env } from "./types/env";
 
@@ -363,6 +365,9 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     );
     const configReleaseApi = new ConfigReleaseApi(configReleaseService);
     const subscriptionApi = new SubscriptionApi(subscriptionService);
+    const subscriptionDiagnosticsApi = new SubscriptionDiagnosticsApi(
+      new SubscriptionDiagnosticsService(subscriptionRepository, configRepository)
+    );
     const diagnosticsApi = new DiagnosticsApi();
 
     if (url.pathname === "/internal/diagnostics" && request.method === "GET") {
@@ -430,6 +435,11 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       return subscriptionApi.create(context, body);
+    }
+
+    const subscriptionDiagnosticsMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/diagnostics$/);
+    if (subscriptionDiagnosticsMatch && request.method === "GET") {
+      return subscriptionDiagnosticsApi.get(context, decodeURIComponent(subscriptionDiagnosticsMatch[1]));
     }
 
     const subscriptionTokenRotateMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/token\/rotate$/);
