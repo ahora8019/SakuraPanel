@@ -27,7 +27,7 @@ export interface DiagnosticsResult {
   };
 }
 
-export async function runDiagnostics(env: Env): Promise<DiagnosticsResult> {
+export async function runDiagnostics(env: Env, deep = true): Promise<DiagnosticsResult> {
   if (!env.DB) {
     return {
       ok: false,
