@@ -31,6 +31,7 @@ SakuraPanel is designed as a serverless Cloudflare application for managing user
 - [HTTP surface](#http-surface)
 - [Security model](#security-model)
 - [Documentation](#documentation)
+- [Deployment automation](#deployment-automation-planned)
 - [Release policy](#release-policy)
 - [Current status](#current-status)
 
@@ -44,6 +45,7 @@ SakuraPanel is designed as a serverless Cloudflare application for managing user
 - **Security controls** including request-body limits, same-origin checks for cookie-authenticated mutations, rate limiting, emergency lock, and audit records.
 - **Operational endpoints** for health and readiness checks.
 - **Automated checks** through GitHub Actions.
+- **Planned Telegram deployment bot**, to be built after the Core is stable and kept decoupled from Core application logic.
 
 Features listed here describe code in the repository; they do not imply that a production environment has been deployed or independently verified.
 
@@ -170,6 +172,22 @@ Internal API groups cover users, devices, templates, configs, config compatibili
 - [Product roadmap](docs/sakurapanel-roadmap.md)
 - [Contributing guide](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)
+
+## Deployment automation (planned)
+
+A Telegram bot is planned as a controlled interface for deploying and operating SakuraPanel. The bot is a later phase: the Core should be completed and validated first, and deployment-bot functionality must remain decoupled from the Core.
+
+Planned flow:
+
+```text
+Telegram Bot → authenticated deployment request → GitHub Actions
+             → checks / tests / D1 migrations → Wrangler deploy
+             → health check → result and logs reported to Telegram
+```
+
+Planned commands include `/deploy`, `/update`, `/status`, `/logs`, `/rollback`, `/health`, and `/version`. Execution must be restricted to authorized owners, logged, and protected by explicit release gates. Failed deployments should be diagnosed and, where safe and supported, rolled back.
+
+**Security rule:** Cloudflare API tokens and other deployment secrets must never be sent in Telegram messages, exposed as workflow inputs, or committed to the repository. Store secrets only in the appropriate secret manager. This section documents the intended design; it does not claim that the bot is implemented or operational.
 
 ## Release policy
 
