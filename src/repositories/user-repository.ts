@@ -45,8 +45,18 @@ export class D1UserRepository implements UserRepository {
       .run();
   }
 
-  async updateStatus(id: string, status: UserStatus, updatedAt: string): Promise<void> {
-    await this.db.prepare("UPDATE users SET status = ?, security_version = security_version + 1, updated_at = ? WHERE id = ?")
-      .bind(status, updatedAt, id).run();
+  async updateStatus(id: string, status: UserStatus, updatedAt: string): Promise<boolean> {
+    const result = await this.db.prepare(`UPDATE users
+      SET status = ?, security_version = security_version + 1, updated_at = ?
+      WHERE id = ?
+        AND NOT (
+          role = 'OWNER'
+          AND status = 'ACTIVE'
+          AND ? != 'ACTIVE'
+          AND (SELECT COUNT(*) FROM users WHERE role = 'OWNER' AND status = 'ACTIVE') <= 1
+        )`)
+      .bind(status, updatedAt, id, status)
+      .run();
+    return (result.meta?.changes ?? 0) > 0;
   }
 }
