@@ -51,7 +51,8 @@ for (const path of [
   "tests/config-studio-malformed.test.ts",
   "tests/scheduled-pulse.test.ts",
   "tests/server-timing.test.ts",
-  "tests/route-health-cleanup.test.ts"
+  "tests/route-health-cleanup.test.ts",
+  "tests/operation-timing.test.ts"
 ]) {
   check("required_test:" + path, existsSync(path), existsSync(path) ? "test file exists; test execution is a separate gate" : "required regression test file is missing");
 }
@@ -63,7 +64,10 @@ for (const [name, path, pattern, detail] of [
   ["subscription_provision_server_timing", "src/api/subscription-api.ts", /Server-Timing.*subscription_provision/, "real subscription provisioning reports server-side duration"],
   ["route_candidate_schema", "migrations/0020_route_candidates.sql", /CREATE TABLE route_candidates/, "Route Advisor has a dedicated candidate model"],
   ["route_health_sample_schema", "migrations/0021_route_health_samples.sql", /CREATE TABLE route_health_samples/, "Route Advisor has a persisted health evidence model"],
-  ["route_health_retention", "src/core/route-health-cleanup.ts", /LIMIT \?/, "Route Advisor evidence retention deletes a bounded batch"]
+  ["route_health_retention", "src/core/route-health-cleanup.ts", /LIMIT \?/, "Route Advisor evidence retention deletes a bounded batch"],
+  ["operation_timing_schema", "migrations/0022_operation_timing_samples.sql", /CREATE TABLE operation_timing_samples/, "real operation timings have a dedicated history table"],
+  ["operation_timing_retention", "src/core/operation-timing.ts", /LIMIT \?/, "operation timing history uses bounded retention"],
+  ["speed_history_query", "src/api/v1-systems-api.ts", /operation_timing_samples.*LIMIT 100/s, "Speed Lab history query is bounded to 100 rows"]
 ]) {
   try {
     check(name, pattern.test(read(path)), detail);
