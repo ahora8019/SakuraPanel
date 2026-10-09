@@ -60,7 +60,7 @@ const foreignKeys: Record<string, Array<{ from: string; table: string; to: strin
   subscription_versions: [{ from: "subscription_id", table: "subscriptions", to: "id" }],
   auth_sessions: [{ from: "user_id", table: "users", to: "id" }]
 };
-function fakeDb(options: { missingColumn?: string; queryFailure?: boolean; foreignKeyViolation?: boolean; missingForeignKey?: string; legacyEndpointTable?: boolean } = {}): D1Database {
+function fakeDb(options: { missingColumn?: string; queryFailure?: boolean; foreignKeyViolation?: boolean; missingForeignKey?: string; legacyEndpointTable?: boolean; missingUniqueConstraint?: string } = {}): D1Database {
   const db = {
     prepare(sql: string) {
       return {
@@ -85,7 +85,7 @@ function fakeDb(options: { missingColumn?: string; queryFailure?: boolean; forei
           if (sql.includes("sqlite_master") && sql.includes("type='index'")) return { results: indexes.map(name => ({ name })) };
           if (sql.includes("PRAGMA index_list(")) {
             const table = sql.match(/PRAGMA index_list\(([^)]+)\)/)?.[1] ?? "";
-            return { results: (uniqueIndexes[table] ?? []).map(item => ({ name: item.name, unique: item.unique })) };
+            return { results: (uniqueIndexes[table] ?? []).filter(item => table + "." + item.columns.join("+") !== options.missingUniqueConstraint).map(item => ({ name: item.name, unique: item.unique })) };
           }
           if (sql.includes("PRAGMA index_info(")) {
             const index = sql.match(/PRAGMA index_info\(([^)]+)\)/)?.[1] ?? "";
@@ -132,6 +132,12 @@ describe("Sakura Pulse", () => {
     const report = await runPulse(env({ db: fakeDb({ legacyEndpointTable: true }), kv: fakeKv() }));
     expect(report.status).toBe("failed");
     expect(report.checks.find(check => check.name === "database_schema")?.detail).toContain("unexpected_legacy_tables");
+  });
+
+  it("fails schema health when a required unique constraint is missing", async () => {
+    const report = await runPulse(env({ db: fakeDb({ missingUniqueConstraint: "config_releases.config_id+version" }), kv: fakeKv() }));
+    expect(report.status).toBe("failed");
+    expect(report.checks.find(check => check.name === "database_schema")?.detail).toContain("missing_unique_constraints");
   });
 
   it("fails schema health when a required foreign-key constraint is missing", async () => {
