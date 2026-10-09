@@ -32,7 +32,9 @@ export class DeviceService {
     if (status !== "ACTIVE" && status !== "DISABLED") throw new Error("validation_failed");
     if (status === "ACTIVE" && device.status !== "ACTIVE" && this.devices.activateIfBelowActiveLimit) {
       if (!(await this.devices.activateIfBelowActiveLimit(id, device.userId, MAX_ACTIVE_DEVICES_PER_USER, now))) {
-        throw new Error("device_limit_reached");
+        // A concurrent request may already have activated this same device.
+        const latest = await this.devices.findById(id);
+        if (!latest || latest.status !== "ACTIVE") throw new Error("device_limit_reached");
       }
     } else {
       if (status === "ACTIVE" && device.status !== "ACTIVE" &&
