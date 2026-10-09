@@ -8,7 +8,7 @@ function config(overrides: Partial<GeneratedConfig> = {}): GeneratedConfig {
     userId: "user-1",
     templateId: "template-1",
     templateVersion: 1,
-    payload: { uri: "vless://abc@example.com:443?security=tls", label: "東京" },
+    payload: { uri: "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls", label: "東京" },
     status: "ACTIVE",
     createdAt: "2026-10-01T00:00:00.000Z",
     ...overrides
@@ -37,21 +37,21 @@ describe("Config Studio", () => {
   });
 
   it("excludes sensitive payloads instead of redacting protocol data", () => {
-    const result = exportConfigs([config({ payload: { uri: "vless://secret@example.com:443", private_key: "do-not-export" } })], "json");
+    const result = exportConfigs([config({ payload: { uri: "vless://11111111-1111-4111-8111-111111111111@example.com:443", private_key: "do-not-export" } })], "json");
     expect(result.count).toBe(0);
     expect(result.excluded.sensitive).toBe(1);
     expect(result.body).not.toContain("do-not-export");
   });
 
   it("exports existing recognized links without rewriting them", () => {
-    const uri = "vless://abc@example.com:443?security=tls";
+    const uri = "vless://11111111-1111-4111-8111-111111111111@example.com:443?security=tls";
     const result = exportConfigs([config({ payload: { uri } })], "links");
     expect(result.body).toBe(uri);
     expect(result.count).toBe(1);
   });
 
   it("uses UTF-8 standard Base64 for subscription line lists and round-trips Unicode", () => {
-    const uri = "vless://abc@example.com:443?remarks=東京";
+    const uri = "vless://11111111-1111-4111-8111-111111111111@example.com:443?remarks=東京";
     const result = exportConfigs([config({ payload: { uri } })], "subscription");
     const binary = atob(result.body);
     const decoded = new TextDecoder().decode(Uint8Array.from(binary, char => char.charCodeAt(0)));
