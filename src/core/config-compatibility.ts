@@ -67,7 +67,17 @@ export function evaluateCompatibility(config: GeneratedConfig, target: ConfigCom
 
   if (target.clients.length > 0) {
     const clients = value.clients as string[];
-    if (!target.clients.some(client => clients.includes(client))) return { compatible: false, reasons: ["client_mismatch"] };
+    if (!target.clients.some(client =>
+      clients.some(name => name.trim().toLowerCase() === client.trim().toLowerCase())
+    )) return { compatible: false, reasons: ["client_mismatch"] };
+  }
+
+  if (target.features?.length) {
+    const declaredFeatures = value.features as CompatibilityFeature[] | undefined;
+    if (!declaredFeatures) return { compatible: false, reasons: ["compatibility_features_unknown"] };
+    if (target.features.some(feature => !declaredFeatures.includes(feature))) {
+      return { compatible: false, reasons: ["feature_mismatch"] };
+    }
   }
 
   return { compatible: true, reasons: [] };
