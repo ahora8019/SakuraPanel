@@ -17,9 +17,10 @@ const MAX_EXPORT_CONFIGS = 100;
 function hasSensitiveField(value: unknown, depth = 0): boolean {
   if (depth > 12 || value === null || typeof value !== "object") return false;
   if (Array.isArray(value)) return value.some(item => hasSensitiveField(item, depth + 1));
-  return Object.entries(value as Record<string, unknown>).some(([key, child]) =>
-    SENSITIVE_KEY.test(key.replace(/[-\s]/g, "_")) || hasSensitiveField(child, depth + 1)
-  );
+  return Object.entries(value as Record<string, unknown>).some(([key, child]) => {
+    const normalized = key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").replace(/[-\s]/g, "_").toLowerCase();
+    return SENSITIVE_KEY.test(normalized) || hasSensitiveField(child, depth + 1);
+  });
 }
 
 function validConnectionUri(config: GeneratedConfig): string | null {
@@ -51,14 +52,15 @@ export function inspectConfig(config: GeneratedConfig, now = new Date().toISOStr
     reasons.push("payload_invalid");
   }
   if (reasons.length) return { config, state: "invalid", reasons };
+  if (!["ACTIVE", "EXPIRED", "REVOKED"].includes(String(config.status))) return { config, state: "invalid", reasons: ["configuration_status_invalid"] };
   if (hasSensitiveField(config.payload)) return { config, state: "sensitive", reasons: ["sensitive_fields_excluded"] };
   const nowMs = Date.parse(now);
-  if (config.status === "EXPIRED") return { config, state: "expired", reasons: ["configuration_expired"] };
   if (config.expiresAt) {
     const expiresAt = Date.parse(config.expiresAt);
     if (!Number.isFinite(expiresAt)) return { config, state: "invalid", reasons: ["invalid_expiration"] };
     if (expiresAt <= nowMs) return { config, state: "expired", reasons: ["configuration_expired"] };
   }
+  if (config.status === "EXPIRED") return { config, state: "expired", reasons: ["configuration_expired"] };
   if (config.status !== "ACTIVE") return { config, state: "disabled", reasons: ["configuration_not_active"] };
   return { config, state: "active", reasons: [] };
 }
