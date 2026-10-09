@@ -59,7 +59,8 @@ export default {
         service: "sakurapanel",
         requestId,
         checks: {
-          database: readiness.database.status
+          database: readiness.database.status,
+          securityControl: readiness.securityControl.status
         }
       }, {
         status: readiness.ok ? 200 : 503,
@@ -82,12 +83,20 @@ export default {
       }
     }
 
-    if (env.SECURITY_KV) {
-      try {
-        await new EmergencyLock(env.SECURITY_KV).assertUnlocked();
-      } catch {
-        return Response.json({ ok: false, error: "emergency_lock_active" }, { status: 503 });
-      }
+    if (!env.SECURITY_KV) {
+      return Response.json({ ok: false, error: "security_control_not_configured" }, {
+        status: 503,
+        headers: { "cache-control": "no-store" }
+      });
+    }
+
+    try {
+      await new EmergencyLock(env.SECURITY_KV).assertUnlocked();
+    } catch {
+      return Response.json({ ok: false, error: "emergency_lock_active" }, {
+        status: 503,
+        headers: { "cache-control": "no-store" }
+      });
     }
 
     const publicSubscriptionMatch = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{43})$/);
