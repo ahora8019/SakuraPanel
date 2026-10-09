@@ -35,6 +35,7 @@ import { V1SystemsApi } from "./api/v1-systems-api";
 import { ownerLabsResponse } from "./ui/owner-labs";
 import { runScheduledPulse } from "./core/scheduled-pulse";
 import { cleanupRouteHealthSamples } from "./core/route-health-cleanup";
+import { cleanupOperationTimingSamples } from "./core/operation-timing";
 
 import type { Env } from "./types/env";
 
@@ -44,6 +45,7 @@ export default {
     await runScheduledPulse(env, _controller.scheduledTime);
     await cleanupRateLimitBuckets(env.DB);
     await cleanupRouteHealthSamples(env.DB);
+    await cleanupOperationTimingSamples(env.DB);
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -380,7 +382,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     const userApi = new UserApi(userService);
     const deviceApi = new DeviceApi(deviceService);
     const templateApi = new TemplateApi(templateService);
-    const configApi = new ConfigApi(configService);
+    const configApi = new ConfigApi(configService, env.DB!);
     const configReleaseService = new ConfigReleaseService(
       configRepository,
       new D1ConfigReleaseRepository(env.DB!),
@@ -388,7 +390,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       new D1AuditRepository(env.DB!)
     );
     const configReleaseApi = new ConfigReleaseApi(configReleaseService);
-    const subscriptionApi = new SubscriptionApi(subscriptionService);
+    const subscriptionApi = new SubscriptionApi(subscriptionService, env.DB!);
     const subscriptionDiagnosticsApi = new SubscriptionDiagnosticsApi(
       new SubscriptionDiagnosticsService(subscriptionRepository, configRepository)
     );
