@@ -36,7 +36,7 @@ import { AuditApi } from "./api/audit-api";
 import type { Env } from "./types/env";
 
 
-function decodePathSegment(value: string): string {
+export function decodePathSegment(value: string): string {
   try {
     return decodeURIComponent(value);
   } catch {
