@@ -61,6 +61,20 @@ jobs:
             console.error("PREVIEW_WORKER_URL must be an HTTPS workers.dev preview URL.");
             process.exit(1);
           }
+          let previewHost = "";
+          try { previewHost = new URL(process.env.PREVIEW_WORKER_URL).hostname; } catch {}
+          if (!process.env.PREVIEW_WORKER_URL.startsWith("https://") || !previewHost.endsWith(".workers.dev")) {
+            console.error("PREVIEW_WORKER_URL must be an HTTPS workers.dev preview URL.");
+            process.exit(1);
+          }
+          if (process.env.PREVIEW_D1_DATABASE_ID === "db7c0fc3-7e65-49c7-8005-a23fd9adbbfb") {
+            console.error("Preview D1 must not use the production database.");
+            process.exit(1);
+          }
+          if (process.env.PREVIEW_SECURITY_KV_ID === "fdc01356fa8d48a8bbd375edc113441a") {
+            console.error("Preview SECURITY_KV must not use the production namespace.");
+            process.exit(1);
+          }
           if (process.env.PREVIEW_AUTH_SECRET.length < 32) {
             console.error("PREVIEW_AUTH_SECRET must be at least 32 characters.");
             process.exit(1);
