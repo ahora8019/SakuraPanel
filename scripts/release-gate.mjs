@@ -42,6 +42,7 @@ try {
 }
 
 for (const path of [
+  "tests/schema-integrity.test.ts",
   "tests/readiness.test.ts",
   "tests/security.test.ts",
   "tests/user-authorization.test.ts",
