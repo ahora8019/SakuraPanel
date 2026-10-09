@@ -180,6 +180,18 @@ export class SubscriptionService {
     now = new Date().toISOString()
   ): Promise<Subscription> {
     if (!["ACTIVE", "EXPIRED", "REVOKED"].includes(status)) throw new Error("validation_failed");
+    const current = await this.get(id);
+    // Revocation is terminal: reactivating the same record would revive an old
+    // bearer token that may have been revoked after compromise.
+    if (current.status === "REVOKED" && status === "ACTIVE") {
+      throw new Error("subscription_revoked_terminal");
+    }
+    if (status === "ACTIVE" && current.expiresAt) {
+      const expiresMs = Date.parse(current.expiresAt);
+      if (!Number.isFinite(expiresMs) || expiresMs <= Date.parse(now)) {
+        throw new Error("subscription_expired");
+      }
+    }
     if (!(await this.repository.updateStatus(id, status, now))) throw new Error("subscription_not_found");
     return this.get(id);
   }
