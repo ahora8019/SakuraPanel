@@ -120,7 +120,7 @@ function statusFor(error: unknown): number {
   const code = error instanceof Error ? error.message : "";
   if (code === "forbidden" || code === "user_not_active") return 403;
   if (code === "not_found" || code === "subscription_not_found" || code === "template_not_found") return 404;
-  if (code === "conflict") return 409;
+  if (code === "conflict" || code === "subscription_revoked_terminal") return 409;
   if (code === "validation_failed" || code === "invalid_expiration" || code === "subscription_expired" || code === "subscription_not_active" || code === "no_eligible_configs" || code === "device_not_owned") return 400;
   return 500;
 }
