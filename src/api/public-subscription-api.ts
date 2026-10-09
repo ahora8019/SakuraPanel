@@ -13,6 +13,17 @@ const PUBLIC_HEADERS = {
   "cross-origin-resource-policy": "same-origin"
 } as const;
 
+export function publicSubscriptionErrorResponse(
+  error: string,
+  status: number,
+  extraHeaders: Record<string, string> = {}
+): Response {
+  return Response.json({ ok: false, error }, {
+    status,
+    headers: { ...PUBLIC_HEADERS, ...extraHeaders }
+  });
+}
+
 export class PublicSubscriptionApi {
   constructor(private readonly service: SubscriptionDeliveryService) {}
 
