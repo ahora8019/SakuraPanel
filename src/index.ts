@@ -31,6 +31,8 @@ import { D1AuditRepository } from "./repositories/audit-repository";
 import { SubscriptionDiagnosticsService } from "./core/subscription-diagnostics";
 import { SubscriptionDiagnosticsApi } from "./api/subscription-diagnostics-api";
 import { AuditApi } from "./api/audit-api";
+import { V1SystemsApi } from "./api/v1-systems-api";
+import { ownerLabsResponse } from "./ui/owner-labs";
 
 import type { Env } from "./types/env";
 
@@ -83,7 +85,9 @@ export default {
       }
     }
 
-    if (!env.SECURITY_KV) {
+    const readOnlyDiagnosticPath = request.method === "GET" && (url.pathname === "/internal/pulse" || url.pathname === "/internal/diagnostics");
+
+    if (!env.SECURITY_KV && !readOnlyDiagnosticPath) {
       return Response.json({ ok: false, error: "security_control_not_configured" }, {
         status: 503,
         headers: { "cache-control": "no-store" }
@@ -91,7 +95,7 @@ export default {
     }
 
     try {
-      await new EmergencyLock(env.SECURITY_KV).assertUnlocked();
+      if (env.SECURITY_KV && !readOnlyDiagnosticPath) await new EmergencyLock(env.SECURITY_KV).assertUnlocked();
     } catch {
       return Response.json({ ok: false, error: "emergency_lock_active" }, {
         status: 503,
@@ -160,6 +164,10 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
 
     if (url.pathname === "/owner" && request.method === "GET") {
       return ownerDashboardResponse();
+    }
+
+    if (url.pathname === "/owner/labs" && request.method === "GET") {
+      return ownerLabsResponse();
     }
 
     if (env.DB && (
@@ -380,9 +388,22 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     );
     const diagnosticsApi = new DiagnosticsApi();
     const auditApi = new AuditApi(new D1AuditRepository(env.DB!));
+    const v1SystemsApi = new V1SystemsApi(configRepository);
 
     if (url.pathname === "/internal/diagnostics" && request.method === "GET") {
       return diagnosticsApi.get(context, env);
+    }
+    if (url.pathname === "/internal/config-studio" && request.method === "GET") {
+      return v1SystemsApi.configStudio(context, env, url.searchParams);
+    }
+    if (url.pathname === "/internal/pulse" && request.method === "GET") {
+      return v1SystemsApi.pulse(context, env);
+    }
+    if (url.pathname === "/internal/speed" && request.method === "POST") {
+      return v1SystemsApi.speed(context, env);
+    }
+    if (url.pathname === "/internal/route-advisor" && request.method === "GET") {
+      return v1SystemsApi.routeAdvisor(context, env);
     }
 
     if (url.pathname === "/internal/audit" && request.method === "GET") {
