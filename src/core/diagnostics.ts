@@ -1,4 +1,5 @@
 import type { Env } from "../types/env";
+import { EmergencyLock } from "../security/emergency-lock";
 
 const REQUIRED_TABLES = [
   "users",
@@ -83,26 +84,39 @@ export async function runDiagnostics(env: Env, deep = true): Promise<Diagnostics
 export interface ReadinessResult {
   ok: boolean;
   database: DiagnosticCheck;
+  securityControl: DiagnosticCheck;
 }
 
 export async function runReadiness(env: Env): Promise<ReadinessResult> {
+  let database: DiagnosticCheck;
   if (!env.DB) {
-    return {
-      ok: false,
-      database: { status: "error", detail: "database_not_configured" }
-    };
+    database = { status: "error", detail: "database_not_configured" };
+  } else {
+    try {
+      await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
+      database = { status: "ok" };
+    } catch {
+      database = { status: "error", detail: "database_check_failed" };
+    }
   }
 
-  try {
-    await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
-    return {
-      ok: true,
-      database: { status: "ok" }
-    };
-  } catch {
-    return {
-      ok: false,
-      database: { status: "error", detail: "database_check_failed" }
-    };
+  let securityControl: DiagnosticCheck;
+  if (!env.SECURITY_KV) {
+    securityControl = { status: "error", detail: "security_control_not_configured" };
+  } else {
+    try {
+      const locked = await new EmergencyLock(env.SECURITY_KV).isLocked();
+      securityControl = locked
+        ? { status: "error", detail: "emergency_lock_active" }
+        : { status: "ok" };
+    } catch {
+      securityControl = { status: "error", detail: "security_control_check_failed" };
+    }
   }
+
+  return {
+    ok: database.status === "ok" && securityControl.status === "ok",
+    database,
+    securityControl
+  };
 }
