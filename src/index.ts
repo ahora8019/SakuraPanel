@@ -40,8 +40,8 @@ import type { Env } from "./types/env";
 export default {
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     if (!env.DB) return;
-    await cleanupRateLimitBuckets(env.DB);
     await runScheduledPulse(env, _controller.scheduledTime);
+    await cleanupRateLimitBuckets(env.DB);
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
