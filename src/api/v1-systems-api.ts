@@ -152,6 +152,7 @@ export class V1SystemsApi {
         ok: true,
         value: {
           status: "available",
+          executionState: items.length ? items[0].status : "never_executed",
           lastSuccessfulAt: last?.completed_at ?? null,
           count: items.length,
           items
