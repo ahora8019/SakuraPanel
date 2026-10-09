@@ -39,7 +39,7 @@ const foreignKeys: Record<string, Array<{ from: string; table: string; to: strin
   subscription_versions: [{ from: "subscription_id", table: "subscriptions", to: "id" }],
   auth_sessions: [{ from: "user_id", table: "users", to: "id" }]
 };
-function fakeDb(options: { missingColumn?: string; queryFailure?: boolean; foreignKeyViolation?: boolean; missingForeignKey?: string } = {}): D1Database {
+function fakeDb(options: { missingColumn?: string; queryFailure?: boolean; foreignKeyViolation?: boolean; missingForeignKey?: string; legacyEndpointTable?: boolean } = {}): D1Database {
   const db = {
     prepare(sql: string) {
       return {
@@ -53,7 +53,9 @@ function fakeDb(options: { missingColumn?: string; queryFailure?: boolean; forei
         async all() {
           if (options.queryFailure) throw new Error("database unavailable");
           if (sql.includes("sqlite_master") && sql.includes("type='table'")) {
-            return { results: Object.keys(columns).map(name => ({ name })) };
+            const names = Object.keys(columns);
+            if (options.legacyEndpointTable) names.push("endpoints");
+            return { results: names.map(name => ({ name })) };
           }
           if (sql.includes("PRAGMA table_info(")) {
             const table = sql.match(/PRAGMA table_info\(([^)]+)\)/)?.[1] ?? "";
@@ -95,6 +97,12 @@ describe("Sakura Pulse", () => {
     const report = await runPulse(env({ db: fakeDb({ missingColumn: "configs.published_version" }), kv: fakeKv() }));
     expect(report.status).toBe("failed");
     expect(report.checks.find(check => check.name === "database_schema")?.status).toBe("failed");
+  });
+
+  it("fails schema health when removed legacy endpoint tables unexpectedly remain", async () => {
+    const report = await runPulse(env({ db: fakeDb({ legacyEndpointTable: true }), kv: fakeKv() }));
+    expect(report.status).toBe("failed");
+    expect(report.checks.find(check => check.name === "database_schema")?.detail).toContain("unexpected_legacy_tables");
   });
 
   it("fails schema health when a required foreign-key constraint is missing", async () => {
