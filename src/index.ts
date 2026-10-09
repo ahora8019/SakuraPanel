@@ -223,7 +223,16 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
  }catch(err){out.textContent=String(err)}
 });
 </script></body></html>`, {
-        headers: { "content-type": "text/html; charset=UTF-8", "cache-control": "no-store" }
+        headers: {
+          "content-type": "text/html; charset=UTF-8",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "cross-origin-resource-policy": "same-origin",
+          "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'"
+        }
       });
     }
 
