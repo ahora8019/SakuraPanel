@@ -61,7 +61,7 @@ function fakeDb(options: { missingColumn?: string; queryFailure?: boolean; forei
           if (sql.includes("sqlite_master") && sql.includes("type='index'")) return { results: indexes.map(name => ({ name })) };
           if (sql.includes("PRAGMA foreign_key_check")) return { results: options.foreignKeyViolation ? [{ table: "configs" }] : [] };
           if (sql.includes("PRAGMA foreign_key_list(")) {
-            const table = sql.match(/PRAGMA foreign_key_list\\(([^)]+)\\)/)?.[1] ?? "";
+            const table = sql.match(/PRAGMA foreign_key_list\(([^)]+)\)/)?.[1] ?? "";
             return { results: (foreignKeys[table] ?? []).filter(key => table + "." + key.from + "->" + key.table + "." + key.to !== options.missingForeignKey) };
           }
           return { results: [] };
