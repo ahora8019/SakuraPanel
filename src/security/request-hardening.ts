@@ -40,7 +40,7 @@ export async function limitRequestBody(
   request: Request,
   maxBytes = MAX_REQUEST_BODY_BYTES
 ): Promise<Request | null> {
-  if (SAFE_METHODS.has(request.method.toUpperCase()) || !request.body) return request;
+  if (!request.body) return request;
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) throw new Error("invalid_body_limit");
 
   const declaredLength = request.headers.get("content-length");
