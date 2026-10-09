@@ -171,6 +171,7 @@ describe("security core", () => {
       apiKey: "api-secret",
       private_key: "private-secret",
       bootstrapSecret: "bootstrap-secret",
+      passwordResetToken: "reset-secret",
       safeLabel: "visible"
     });
     expect(metadata).toEqual({
@@ -178,6 +179,7 @@ describe("security core", () => {
       apiKey: "[redacted]",
       private_key: "[redacted]",
       bootstrapSecret: "[redacted]",
+      passwordResetToken: "[redacted]",
       safeLabel: "visible"
     });
   });
