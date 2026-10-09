@@ -33,6 +33,7 @@ import { SubscriptionDiagnosticsApi } from "./api/subscription-diagnostics-api";
 import { AuditApi } from "./api/audit-api";
 import { V1SystemsApi } from "./api/v1-systems-api";
 import { ownerLabsResponse } from "./ui/owner-labs";
+import { runScheduledPulse } from "./core/scheduled-pulse";
 
 import type { Env } from "./types/env";
 
@@ -40,6 +41,7 @@ export default {
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     if (!env.DB) return;
     await cleanupRateLimitBuckets(env.DB);
+    await runScheduledPulse(env, _controller.scheduledTime);
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
