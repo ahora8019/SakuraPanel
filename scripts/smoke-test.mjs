@@ -46,6 +46,7 @@ const ready = await request("/ready");
 assert(ready.response.status === 200, "/ready must return 200");
 assert(ready.body?.ok === true, "/ready must return ok=true");
 assert(ready.body?.checks?.database === "ok", "/ready database check must be ok");
+assert(ready.body?.checks?.securityControl === "ok", "/ready emergency-lock control must be ok");
 assert(typeof ready.body?.requestId === "string" && ready.body.requestId.length > 0, "/ready must return requestId");
 assert(ready.response.headers.get("x-request-id") === ready.body.requestId, "/ready x-request-id must match body requestId");
 assert(ready.response.headers.get("cache-control") === "no-store", "/ready must be no-store");
