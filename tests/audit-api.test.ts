@@ -8,7 +8,9 @@ const context: SecurityContext = {
     role: "OWNER",
     sessionId: "session-1",
     tokenVersion: 1,
-    securityVersion: 1
+    securityVersion: 1,
+    issuedAt: 1791570000,
+    expiresAt: 1791573600
   }
 };
 
