@@ -60,4 +60,21 @@ describe("subscription diagnostics",()=>{
   expect(d.compatibility?.incompatible).toBe(1);
   expect(d.issues).toContain("incompatible_configs");
  });
+ it("treats malformed subscription expiry as expired like public delivery",async()=>{
+  const invalidSub: Subscription={...sub,expiresAt:"not-a-date"};
+  const ver:SubscriptionVersion={id:"v1",subscriptionId:"s1",version:1,configIds:["c1"],createdAt:"2026-01-01T00:00:00.000Z"};
+  const d=await new SubscriptionDiagnosticsService(new S(invalidSub,ver),new C([cfg("c1","ACTIVE")])).inspect("s1","2026-01-01T00:01:00.000Z");
+  expect(d.subscription.expired).toBe(true);
+  expect(d.issues).toContain("subscription_expired");
+  expect(d.status).toBe("error");
+ });
+ it("does not count configs with malformed expiry as eligible",async()=>{
+  const ver:SubscriptionVersion={id:"v1",subscriptionId:"s1",version:1,configIds:["c1"],createdAt:"2026-01-01T00:00:00.000Z"};
+  const invalidConfig={...cfg("c1","ACTIVE"),expiresAt:"not-a-date"};
+  const d=await new SubscriptionDiagnosticsService(new S(sub,ver),new C([invalidConfig])).inspect("s1","2026-01-01T00:01:00.000Z");
+  expect(d.configs.eligible).toBe(0);
+  expect(d.configs.expired).toBe(1);
+  expect(d.issues).toContain("expired_configs");
+ });
+
 });
