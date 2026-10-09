@@ -99,11 +99,11 @@ describe("config compatibility", () => {
       platform: "ANDROID",
       protocol: "VLESS",
       clients: ["v2rayNG"],
-      features: ["QUIC"]
+      features: ["WEBSOCKET"]
     });
     expect(result.entries[0]?.status).toBe("partial");
     expect(result.entries[0]?.reasons).toContain("config_feature_missing");
-    expect(result.entries[0]?.unsupportedFeatures).toContain("QUIC");
+    expect(result.entries[0]?.unsupportedFeatures).toContain("WEBSOCKET");
   });
 
   it("marks requested feature support unknown when config metadata omits features", () => {
