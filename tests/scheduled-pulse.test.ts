@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Env } from "../src/types/env";
 
 vi.mock("../src/core/v1-diagnostics", () => ({
   runPulse: vi.fn(async () => ({
