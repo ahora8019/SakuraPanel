@@ -128,6 +128,19 @@ export async function runPulse(env: Env): Promise<PulseReport> {
         const indexes = await env.DB!.prepare("SELECT name FROM sqlite_master WHERE type='index'").all<{ name: string }>();
         const indexNames = new Set((indexes.results ?? []).map(row => row.name));
         const missingIndexes = REQUIRED_INDEXES.filter(name => !indexNames.has(name));
+        const missingUniqueConstraints: string[] = [];
+        for (const [table, requiredKeys] of Object.entries(REQUIRED_UNIQUE_KEYS)) {
+          if (!names.has(table)) continue;
+          const tableIndexes = await env.DB!.prepare("PRAGMA index_list(" + table + ")").all<{ name: string; unique: number }>();
+          const uniqueIndexes = (tableIndexes.results ?? []).filter(index => Number(index.unique) === 1 && /^[A-Za-z0-9_]+$/.test(index.name));
+          const signatures = new Set<string>();
+          for (const index of uniqueIndexes) {
+            const info = await env.DB!.prepare("PRAGMA index_info(" + index.name + ")").all<{ seqno: number; name: string | null }>();
+            const columns = (info.results ?? []).slice().sort((a, b) => a.seqno - b.seqno).map(row => row.name).filter((name): name is string => typeof name === "string");
+            signatures.add(columns.join(","));
+          }
+          for (const key of requiredKeys) if (!signatures.has(key.join(","))) missingUniqueConstraints.push(table + "." + key.join("+"));
+        }
         const missingForeignKeys: string[] = [];
         for (const [table, requiredKeys] of Object.entries(REQUIRED_FOREIGN_KEYS)) {
           if (!names.has(table)) continue;
@@ -138,9 +151,9 @@ export async function runPulse(env: Env): Promise<PulseReport> {
             if (!actual.has(signature)) missingForeignKeys.push(table + "." + signature);
           }
         }
-        return { missingTables, missingColumns, missingIndexes, missingForeignKeys, unexpectedLegacyTables };
+        return { missingTables, missingColumns, missingIndexes, missingUniqueConstraints, missingForeignKeys, unexpectedLegacyTables };
       });
-      const schemaOkay = schemaResult.ok && schemaResult.value!.missingTables.length === 0 && schemaResult.value!.missingColumns.length === 0 && schemaResult.value!.missingIndexes.length === 0 && schemaResult.value!.missingForeignKeys.length === 0 && schemaResult.value!.unexpectedLegacyTables.length === 0;
+      const schemaOkay = schemaResult.ok && schemaResult.value!.missingTables.length === 0 && schemaResult.value!.missingColumns.length === 0 && schemaResult.value!.missingIndexes.length === 0 && schemaResult.value!.missingUniqueConstraints.length === 0 && schemaResult.value!.missingForeignKeys.length === 0 && schemaResult.value!.unexpectedLegacyTables.length === 0;
       checks.push({
         name: "database_schema",
         status: !schemaResult.ok ? (schemaResult.error === "timeout" ? "unavailable" : "failed") : schemaOkay ? "passed" : "failed",
@@ -150,6 +163,7 @@ export async function runPulse(env: Env): Promise<PulseReport> {
             ...(schemaResult.value!.missingTables.length ? ["missing_tables:" + schemaResult.value!.missingTables.join(",")] : []),
             ...(schemaResult.value!.missingColumns.length ? ["missing_columns:" + schemaResult.value!.missingColumns.join(",")] : []),
             ...(schemaResult.value!.missingIndexes.length ? ["missing_indexes:" + schemaResult.value!.missingIndexes.join(",")] : []),
+            ...(schemaResult.value!.missingUniqueConstraints.length ? ["missing_unique_constraints:" + schemaResult.value!.missingUniqueConstraints.join(",")] : []),
             ...(schemaResult.value!.missingForeignKeys.length ? ["missing_foreign_keys:" + schemaResult.value!.missingForeignKeys.join(",")] : []),
             ...(schemaResult.value!.unexpectedLegacyTables.length ? ["unexpected_legacy_tables:" + schemaResult.value!.unexpectedLegacyTables.join(",")] : [])
           ].join(";") } : {})
