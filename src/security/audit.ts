@@ -21,25 +21,16 @@ export interface AuditSink {
   write(event: AuditEvent): Promise<void>;
 }
 
-const SENSITIVE_KEYS = new Set([
+const SENSITIVE_KEY_FRAGMENTS = [
   "password",
   "secret",
   "token",
   "authorization",
   "apikey",
   "privatekey",
-  "accesstoken",
-  "refreshtoken",
-  "clientsecret",
-  "bootstrapsecret",
-  "tokenhash",
-  "passwordhash",
-  "cookie",
   "credential",
-  "credentials",
-  "secretkey",
-  "signingkey"
-]);
+  "cookie"
+] as const;
 
 export function sanitizeAuditMetadata(
   metadata: Record<string, string> | undefined
@@ -48,7 +39,7 @@ export function sanitizeAuditMetadata(
 
   return Object.fromEntries(
     Object.entries(metadata).map(([key, value]) =>
-      SENSITIVE_KEYS.has(key.toLowerCase().replace(/[^a-z0-9]/g, "")) ? [key, "[redacted]"] : [key, value]
+      SENSITIVE_KEY_FRAGMENTS.some(fragment => key.toLowerCase().replace(/[^a-z0-9]/g, "").includes(fragment)) ? [key, "[redacted]"] : [key, value]
     )
   );
 }
