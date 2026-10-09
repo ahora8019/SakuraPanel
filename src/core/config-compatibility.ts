@@ -162,11 +162,11 @@ export function evaluateCompatibilityMatrix(
       const configDeclares = declaredFeatures?.includes(feature) ?? false;
       if (!clientSupports) {
         unsupportedFeatures.push(feature);
-        reasons.push("feature_unsupported");
+        if (!reasons.includes("feature_unsupported")) reasons.push("feature_unsupported");
       }
       if (requestedFeatures.includes(feature) && declaredFeatures !== undefined && !configDeclares) {
         if (!unsupportedFeatures.includes(feature)) unsupportedFeatures.push(feature);
-        reasons.push("config_feature_missing");
+        if (!reasons.includes("config_feature_missing")) reasons.push("config_feature_missing");
       }
       if (configDeclares && clientSupports) {
         supportedFeatures.push(feature);
