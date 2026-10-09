@@ -23,12 +23,13 @@ export class SubscriptionEngine {
     if (!Number.isFinite(nowMs)) throw new Error("invalid_timestamp");
     assertSubscriptionNotExpired(input.subscription, nowMs);
 
-    const eligible = input.configs.filter(
-      config =>
+    const eligible = [...new Map(input.configs
+      .filter(config =>
         config.userId === input.subscription.userId &&
         config.status === "ACTIVE" &&
         (!config.expiresAt || Date.parse(config.expiresAt) > nowMs)
-    );
+      )
+      .map(config => [config.id, config] as const)).values()];
 
     if (eligible.length === 0) {
       throw new Error("no_eligible_configs");
@@ -63,13 +64,13 @@ export class SubscriptionEngine {
     if (!Number.isFinite(nowMs)) throw new Error("invalid_timestamp");
     assertSubscriptionNotExpired(subscription, nowMs);
 
-    const activeIds = configs
+    const activeIds = [...new Set(configs
       .filter(config =>
         config.userId === subscription.userId &&
         config.status === "ACTIVE" &&
         (!config.expiresAt || Date.parse(config.expiresAt) > nowMs)
       )
-      .map(config => config.id);
+      .map(config => config.id))];
 
     if (activeIds.length === 0) throw new Error("no_eligible_configs");
     if (activeIds.length > MAX_CONFIGS_PER_SUBSCRIPTION) throw new Error("validation_failed");
