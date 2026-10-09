@@ -102,4 +102,21 @@ describe("application integration flow", () => {
     expect(v2.version).toBe(2);
     expect(v2.configIds).toEqual(v1.configIds);
   });
+  it("rejects token rotation for a malformed subscription expiry", async () => {
+    const subscriptionRepo = new MemorySubscriptionRepository();
+    subscriptionRepo.subscriptions.set("sub-invalid", {
+      id: "sub-invalid",
+      userId: "user-1",
+      status: "ACTIVE",
+      expiresAt: "not-a-date",
+      publicTokenHash: "existing-hash",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    });
+    const service = new SubscriptionService(subscriptionRepo, new MemoryConfigRepository());
+
+    await expect(service.rotateAccessToken("sub-invalid", "2026-01-01T00:01:00.000Z"))
+      .rejects.toThrow("subscription_expired");
+  });
+
 });
