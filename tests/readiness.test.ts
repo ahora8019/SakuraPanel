@@ -22,6 +22,20 @@ function makeKv(value: string | null = null, shouldFail = false): KVNamespace {
 }
 
 describe("production readiness security controls", () => {
+  it("fails readiness when the authentication secret is missing or too short", async () => {
+    const result = await runReadiness({
+      AUTH_SECRET: "short",
+      DB: makeDb(),
+      SECURITY_KV: makeKv(null)
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.authentication).toEqual({
+      status: "error",
+      detail: "auth_secret_missing_or_too_short"
+    });
+  });
+
   it("fails readiness when the emergency-lock binding is missing", async () => {
     const result = await runReadiness({
       AUTH_SECRET: "x".repeat(32),

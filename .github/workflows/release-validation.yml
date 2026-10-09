@@ -1,0 +1,99 @@
+name: Safe Release Lab
+
+on:
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sakurapanel-release-validation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Mandatory release gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        id: setup
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        id: install
+        run: npm install
+
+      - name: Dependency audit
+        id: audit
+        run: npm audit --audit-level=high
+
+      - name: Release configuration and security preflight
+        id: preflight
+        run: node scripts/release-gate.mjs
+
+      - name: Typecheck
+        id: typecheck
+        run: npm run typecheck
+
+      - name: Tests
+        id: tests
+        run: npm test
+
+      - name: Cloudflare Worker build validation (dry run only)
+        id: build
+        run: npx wrangler deploy --dry-run --outdir /tmp/sakurapanel-release-build
+
+      - name: Release evidence summary
+        if: always()
+        env:
+          SETUP_OUTCOME: ${{ steps.setup.outcome }}
+          INSTALL_OUTCOME: ${{ steps.install.outcome }}
+          AUDIT_OUTCOME: ${{ steps.audit.outcome }}
+          PREFLIGHT_OUTCOME: ${{ steps.preflight.outcome }}
+          TYPECHECK_OUTCOME: ${{ steps.typecheck.outcome }}
+          TESTS_OUTCOME: ${{ steps.tests.outcome }}
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+          REVISION: ${{ github.sha }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from "node:fs";
+          const checks = {
+            "Node setup": process.env.SETUP_OUTCOME,
+            "Dependency install": process.env.INSTALL_OUTCOME,
+            "Dependency audit": process.env.AUDIT_OUTCOME,
+            "Configuration/security preflight": process.env.PREFLIGHT_OUTCOME,
+            "Typecheck": process.env.TYPECHECK_OUTCOME,
+            "Automated tests": process.env.TESTS_OUTCOME,
+            "Worker dry-run build": process.env.BUILD_OUTCOME
+          };
+          const mandatory = Object.entries(checks).filter(([name]) => name !== "Node setup");
+          const passed = mandatory.every(([, outcome]) => outcome === "success");
+          const lines = [
+            "",
+            "## Safe Release Lab — reproducible validation report",
+            "",
+            `**Decision:** ${passed ? "PASS — source validation gates passed" : "BLOCKED — one or more mandatory checks failed or were skipped"}`,
+            "",
+            `**Revision:** \`${process.env.REVISION}\``,
+            "",
+            "| Check | Actual workflow outcome |",
+            "|---|---|",
+            ...Object.entries(checks).map(([name, outcome]) => `| ${name} | ${outcome || "unavailable"} |`),
+            "",
+            "This workflow does not deploy to Production, apply remote migrations, prove live health, or verify a restore.",
+            ""
+          ];
+          appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join("\n"));
+          if (!passed) process.exitCode = 1;
+          NODE

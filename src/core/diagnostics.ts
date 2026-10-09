@@ -85,6 +85,7 @@ export interface ReadinessResult {
   ok: boolean;
   database: DiagnosticCheck;
   securityControl: DiagnosticCheck;
+  authentication: DiagnosticCheck;
 }
 
 export async function runReadiness(env: Env): Promise<ReadinessResult> {
@@ -99,6 +100,10 @@ export async function runReadiness(env: Env): Promise<ReadinessResult> {
       database = { status: "error", detail: "database_check_failed" };
     }
   }
+
+  const authentication: DiagnosticCheck = typeof env.AUTH_SECRET === "string" && env.AUTH_SECRET.length >= 32
+    ? { status: "ok" }
+    : { status: "error", detail: "auth_secret_missing_or_too_short" };
 
   let securityControl: DiagnosticCheck;
   if (!env.SECURITY_KV) {
@@ -115,8 +120,9 @@ export async function runReadiness(env: Env): Promise<ReadinessResult> {
   }
 
   return {
-    ok: database.status === "ok" && securityControl.status === "ok",
+    ok: database.status === "ok" && securityControl.status === "ok" && authentication.status === "ok",
     database,
-    securityControl
+    securityControl,
+    authentication
   };
 }
