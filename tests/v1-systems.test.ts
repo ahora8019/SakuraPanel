@@ -53,7 +53,7 @@ describe("Config Studio", () => {
   it("uses UTF-8 standard Base64 for subscription line lists and round-trips Unicode", () => {
     const uri = "vless://abc@example.com:443?remarks=東京";
     const result = exportConfigs([config({ payload: { uri } })], "subscription");
-    const decoded = decodeURIComponent(escape(atob(result.body)));
+    const binary = atob(result.body);\n    const decoded = new TextDecoder().decode(Uint8Array.from(binary, char => char.charCodeAt(0)));
     expect(decoded).toBe(uri);
   });
 
@@ -84,10 +84,10 @@ describe("Sakura Speed Lab and Route Advisor", () => {
   it("ranks fresh healthy compatible candidates and rejects stale or unhealthy evidence", () => {
     const now = "2026-10-09T12:00:00.000Z";
     const result = rankRoutes([
-      { id: "slow", compatible: true, healthy: true, latencyMs: 500, errorRate: 0.01, measuredAt: "2026-10-09T11:59:00.000Z" },
-      { id: "fast", compatible: true, healthy: true, latencyMs: 50, errorRate: 0, measuredAt: "2026-10-09T11:59:00.000Z" },
-      { id: "stale", compatible: true, healthy: true, latencyMs: 1, errorRate: 0, measuredAt: "2026-10-09T10:00:00.000Z" },
-      { id: "down", compatible: true, healthy: false, latencyMs: 5, errorRate: 1, measuredAt: "2026-10-09T11:59:00.000Z" }
+      { id: "slow", compatible: true, healthy: true, latencyMs: 500, errorRate: 0.01, sampleCount: 5, measuredAt: "2026-10-09T11:59:00.000Z" },
+      { id: "fast", compatible: true, healthy: true, latencyMs: 50, errorRate: 0, sampleCount: 5, measuredAt: "2026-10-09T11:59:00.000Z" },
+      { id: "stale", compatible: true, healthy: true, latencyMs: 1, errorRate: 0, sampleCount: 5, measuredAt: "2026-10-09T10:00:00.000Z" },
+      { id: "down", compatible: true, healthy: false, latencyMs: 5, errorRate: 1, sampleCount: 5, measuredAt: "2026-10-09T11:59:00.000Z" }
     ], now);
     expect(result.decision).toBe("recommendation");
     expect(result.candidates[0].id).toBe("fast");
