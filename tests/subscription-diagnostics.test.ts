@@ -77,4 +77,13 @@ describe("subscription diagnostics",()=>{
   expect(d.issues).toContain("expired_configs");
  });
 
+ it("reports versions over the delivery limit without querying config IDs",async()=>{
+  const ids=Array.from({length:101},(_,i)=>`c${i}`);
+  const ver:SubscriptionVersion={id:"v1",subscriptionId:"s1",version:1,configIds:ids,createdAt:"2026-01-01T00:00:00.000Z"};
+  const d=await new SubscriptionDiagnosticsService(new S(sub,ver),new C([])).inspect("s1","2026-01-01T00:01:00.000Z");
+  expect(d.status).toBe("error");
+  expect(d.configs.referenced).toBe(101);
+  expect(d.issues).toContain("config_limit_exceeded");
+ });
+
 });
