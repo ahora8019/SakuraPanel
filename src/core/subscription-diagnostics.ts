@@ -110,6 +110,7 @@ export class SubscriptionDiagnosticsService {
       }
     }
 
+    if (eligible === 0) issues.push("no_eligible_configs");
     if (missing) issues.push("missing_configs");
     if (inactive) issues.push("inactive_configs");
     if (configExpired) issues.push("expired_configs");
