@@ -32,6 +32,7 @@ import { D1AuditRepository } from "./repositories/audit-repository";
 import { SubscriptionDiagnosticsService } from "./core/subscription-diagnostics";
 import { SubscriptionDiagnosticsApi } from "./api/subscription-diagnostics-api";
 import { AuditApi } from "./api/audit-api";
+import { isCookieMutationSameOrigin, limitRequestBody } from "./security/request-hardening";
 
 import type { Env } from "./types/env";
 
@@ -77,6 +78,29 @@ export default {
       }, {
         status: readiness.ok ? 200 : 503,
         headers: { "cache-control": "no-store", "x-request-id": requestId }
+      });
+    }
+
+    if (!isCookieMutationSameOrigin(request)) {
+      return Response.json({ ok: false, error: "csrf_rejected" }, {
+        status: 403,
+        headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
+      });
+    }
+
+    try {
+      const boundedRequest = await limitRequestBody(request);
+      if (!boundedRequest) {
+        return Response.json({ ok: false, error: "request_body_too_large" }, {
+          status: 413,
+          headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
+        });
+      }
+      request = boundedRequest;
+    } catch {
+      return Response.json({ ok: false, error: "invalid_request_body" }, {
+        status: 400,
+        headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
       });
     }
 
