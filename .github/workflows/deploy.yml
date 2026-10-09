@@ -5,6 +5,12 @@ on:
   # This prevents an ordinary merge to main from silently applying D1 migrations
   # and deploying a Worker to production.
   workflow_dispatch:
+    inputs:
+      confirm_production_release:
+        description: "Confirm that you reviewed the release report, migration plan, backup, and rollback procedure."
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -18,6 +24,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Require explicit Production release confirmation
+        if: ${{ !inputs.confirm_production_release }}
+        run: |
+          echo "::error::Production release blocked. Review the release evidence and explicitly confirm the dispatch input."
+          exit 1
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Node
