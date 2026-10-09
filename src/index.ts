@@ -34,6 +34,7 @@ import { AuditApi } from "./api/audit-api";
 import { V1SystemsApi } from "./api/v1-systems-api";
 import { ownerLabsResponse } from "./ui/owner-labs";
 import { runScheduledPulse } from "./core/scheduled-pulse";
+import { cleanupRouteHealthSamples } from "./core/route-health-cleanup";
 
 import type { Env } from "./types/env";
 
@@ -42,6 +43,7 @@ export default {
     if (!env.DB) return;
     await runScheduledPulse(env, _controller.scheduledTime);
     await cleanupRateLimitBuckets(env.DB);
+    await cleanupRouteHealthSamples(env.DB);
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
