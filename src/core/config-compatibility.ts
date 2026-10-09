@@ -163,10 +163,12 @@ export function evaluateCompatibilityMatrix(
       if (!clientSupports) {
         unsupportedFeatures.push(feature);
         reasons.push("feature_unsupported");
-      } else if (requestedFeatures.includes(feature) && declaredFeatures !== undefined && !configDeclares) {
-        unsupportedFeatures.push(feature);
+      }
+      if (requestedFeatures.includes(feature) && declaredFeatures !== undefined && !configDeclares) {
+        if (!unsupportedFeatures.includes(feature)) unsupportedFeatures.push(feature);
         reasons.push("config_feature_missing");
-      } else if (configDeclares && clientSupports) {
+      }
+      if (configDeclares && clientSupports) {
         supportedFeatures.push(feature);
       }
     }
