@@ -34,6 +34,14 @@ describe("security core", () => {
     expect(await auth.verifyToken(token, 1060)).toBeNull();
   });
 
+
+  it("rejects valid JSON tokens whose header or payload is not an object", async () => {
+    const auth = new AuthService("12345678901234567890123456789012");
+    expect(await auth.verifyToken("bnVsbA.bnVsbA.invalid-signature")).toBeNull();
+    expect(await auth.verifyToken("e30.bnVsbA.invalid-signature")).toBeNull();
+    expect(await auth.verifyToken("bnVsbA.e30.invalid-signature")).toBeNull();
+  });
+
   it("rejects oversized bearer tokens before parsing", async () => {
     const auth = new AuthService("12345678901234567890123456789012");
     expect(await auth.verifyToken("a".repeat(4097))).toBeNull();
