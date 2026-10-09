@@ -56,8 +56,8 @@ for (const path of [
 }
 
 for (const [name, path, pattern, detail] of [
-  ["production_environment_gate", ".github/workflows/deploy.yml", /environment:\\s*production/, "Production deployment uses the production environment gate"],
-  ["production_main_branch_only", ".github/workflows/deploy.yml", /github\\.ref\\s*!=\\s*['"]refs\\/heads\\/main['"]/, "Production deployment is restricted to main"],
+  ["production_environment_gate", ".github/workflows/deploy.yml", /environment:\s*production/, "Production deployment uses the production environment gate"],
+  ["production_main_branch_only", ".github/workflows/deploy.yml", /github\.ref\s*!=\s*['"]refs\/heads\/main['"]/, "Production deployment is restricted to main"],
   ["config_generation_server_timing", "src/api/config-api.ts", /Server-Timing.*config_generate/, "real config generation reports server-side duration"],
   ["subscription_provision_server_timing", "src/api/subscription-api.ts", /Server-Timing.*subscription_provision/, "real subscription provisioning reports server-side duration"],
   ["route_candidate_schema", "migrations/0020_route_candidates.sql", /CREATE TABLE route_candidates/, "Route Advisor has a dedicated candidate model"],
