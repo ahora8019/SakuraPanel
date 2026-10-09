@@ -15,7 +15,7 @@ import { DeviceService } from "./core/device-service";
 import { D1UserRepository } from "./repositories/user-repository";
 import { D1DeviceRepository } from "./repositories/device-repository";
 import { SubscriptionApi } from "./api/subscription-api";
-import { PublicSubscriptionApi } from "./api/public-subscription-api";
+import { PublicSubscriptionApi, publicSubscriptionErrorResponse } from "./api/public-subscription-api";
 import { SubscriptionDeliveryService } from "./core/subscription-delivery";
 import { SubscriptionService } from "./core/subscription-service";
 import { D1SubscriptionRepository } from "./repositories/subscription-repository";
@@ -94,45 +94,29 @@ export default {
     const publicSubscriptionMatch = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{1,64})$/);
     if (publicSubscriptionMatch) {
       if (request.method !== "GET") {
-        return Response.json({ ok: false, error: "not_found" }, {
-          status: 404,
-          headers: { "cache-control": "no-store" }
-        });
+        return publicSubscriptionErrorResponse("not_found", 404);
       }
 
       if (!env.DB) {
-        return Response.json({ ok: false, error: "service_not_configured" }, {
-          status: 503,
-          headers: { "cache-control": "no-store", "retry-after": "5" }
-        });
+        return publicSubscriptionErrorResponse("service_not_configured", 503, { "retry-after": "5" });
       }
 
       if (url.search.length > 2048) {
-        return Response.json({ ok: false, error: "validation_failed" }, {
-          status: 400,
-          headers: { "cache-control": "no-store" }
-        });
+        return publicSubscriptionErrorResponse("validation_failed", 400);
       }
 
       if (publicSubscriptionMatch[1].length !== 43) {
-        return Response.json({ ok: false, error: "not_found" }, {
-          status: 404,
-          headers: { "cache-control": "no-store" }
-        });
+        return publicSubscriptionErrorResponse("not_found", 404);
       }
 
       const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
       try {
         const decision = await new KvRateLimiter(env.DB).check(`public:${clientKey}`, 60, 60_000);
         if (!decision.allowed) {
-          return Response.json({ ok: false, error: "rate_limited" }, {
-            status: 429,
-            headers: {
-              "cache-control": "no-store",
-              "retry-after": String(decision.retryAfterSeconds ?? 1),
-              "x-ratelimit-limit": "60",
-              "x-ratelimit-remaining": "0"
-            }
+          return publicSubscriptionErrorResponse("rate_limited", 429, {
+            "retry-after": String(decision.retryAfterSeconds ?? 1),
+            "x-ratelimit-limit": "60",
+            "x-ratelimit-remaining": "0"
           });
         }
 
@@ -151,10 +135,7 @@ export default {
           event: "public_subscription_failure",
           code: error instanceof Error ? error.message : "unknown_error"
         }));
-        return Response.json({ ok: false, error: "service_unavailable" }, {
-          status: 503,
-          headers: { "cache-control": "no-store", "retry-after": "5" }
-        });
+        return publicSubscriptionErrorResponse("service_unavailable", 503, { "retry-after": "5" });
       }
     }
 
