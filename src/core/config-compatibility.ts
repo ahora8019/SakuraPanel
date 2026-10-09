@@ -148,26 +148,43 @@ export function evaluateCompatibilityMatrix(
       reasons.push("client_not_declared");
     }
 
+    const declaredFeatures = value.features as CompatibilityFeature[] | undefined;
+    const requestedFeatures = target.features ?? [];
     const requiredFeatures = Array.from(new Set([
-      ...((value.features as CompatibilityFeature[] | undefined) ?? []),
-      ...(target.features ?? [])
+      ...(declaredFeatures ?? []),
+      ...requestedFeatures
     ]));
-    for (const feature of requiredFeatures) {
-      if (definition.features.includes(feature)) supportedFeatures.push(feature);
-      else unsupportedFeatures.push(feature);
-    }
-    if (unsupportedFeatures.length > 0) reasons.push("feature_unsupported");
+    const configFeatureSupportUnknown = requestedFeatures.length > 0 && declaredFeatures === undefined;
+    if (configFeatureSupportUnknown) reasons.push("config_features_unknown");
 
-    const status =
+    for (const feature of requiredFeatures) {
+      const clientSupports = definition.features.includes(feature);
+      const configDeclares = declaredFeatures?.includes(feature) ?? false;
+      if (!clientSupports) {
+        unsupportedFeatures.push(feature);
+        reasons.push("feature_unsupported");
+      } else if (requestedFeatures.includes(feature) && declaredFeatures !== undefined && !configDeclares) {
+        unsupportedFeatures.push(feature);
+        reasons.push("config_feature_missing");
+      } else if (configDeclares && clientSupports) {
+        supportedFeatures.push(feature);
+      }
+    }
+
+    const isIncompatible =
       reasons.includes("platform_mismatch") ||
       reasons.includes("protocol_mismatch") ||
       reasons.includes("platform_unsupported") ||
       reasons.includes("protocol_unsupported") ||
-      reasons.includes("client_not_declared")
+      reasons.includes("client_not_declared");
+    const status =
+      isIncompatible
         ? "incompatible"
-        : unsupportedFeatures.length > 0
-          ? "partial"
-          : "compatible";
+        : configFeatureSupportUnknown
+          ? "unknown"
+          : unsupportedFeatures.length > 0
+            ? "partial"
+            : "compatible";
 
     return {
       client,
