@@ -20,7 +20,7 @@ const indexes = [
   "idx_users_single_owner", "idx_devices_user_id", "idx_devices_user_status_created_at", "idx_configs_user_id",
   "idx_configs_template_id", "idx_configs_user_created_at", "idx_configs_device_created_at",
   "idx_config_versions_config_id", "idx_config_versions_config_version", "idx_config_releases_config_created_at",
-  "idx_config_releases_status", "idx_subscriptions_user_id", "idx_subscriptions_user_created_at",
+  "idx_config_releases_status", "idx_subscriptions_user_id", "idx_subscriptions_user_created_at", "idx_subscriptions_public_token_hash",
   "idx_subscription_versions_subscription_id", "idx_subscription_versions_created_at",
   "idx_subscription_versions_subscription_version", "idx_audit_logs_actor_id", "idx_audit_logs_created_at",
   "idx_audit_logs_resource", "idx_audit_logs_actor_created_at", "idx_audit_logs_resource_created_at",
@@ -28,6 +28,25 @@ const indexes = [
   "idx_system_check_runs_started_at", "idx_system_check_runs_status_started_at"
 ];
 
+const uniqueIndexes: Record<string, { table: string; columns: string[]; unique: number }[]> = {
+  users: [{ table: "users", columns: ["username"], unique: 1 }, { table: "users", columns: ["role"], unique: 1 }],
+  templates: [{ table: "templates", columns: ["name"], unique: 1 }],
+  config_versions: [{ table: "config_versions", columns: ["config_id", "version"], unique: 1 }],
+  config_releases: [{ table: "config_releases", columns: ["config_id", "version"], unique: 1 }],
+  subscription_versions: [{ table: "subscription_versions", columns: ["subscription_id", "version"], unique: 1 }],
+  subscriptions: [{ table: "subscriptions", columns: ["public_token_hash"], unique: 1 }],
+  system_check_runs: [{ table: "system_check_runs", columns: ["scheduled_slot"], unique: 1 }]
+};
+const uniqueIndexInfo = new Map<string, string[]>([
+  ["sqlite_autoindex_users_1", ["username"]],
+  ["idx_users_single_owner", ["role"]],
+  ["sqlite_autoindex_templates_1", ["name"]],
+  ["sqlite_autoindex_config_versions_1", ["config_id", "version"]],
+  ["sqlite_autoindex_config_releases_1", ["config_id", "version"]],
+  ["sqlite_autoindex_subscription_versions_1", ["subscription_id", "version"]],
+  ["idx_subscriptions_public_token_hash", ["public_token_hash"]],
+  ["sqlite_autoindex_system_check_runs_1", ["scheduled_slot"]]
+]);
 const foreignKeys: Record<string, Array<{ from: string; table: string; to: string }>> = {
   devices: [{ from: "user_id", table: "users", to: "id" }],
   configs: [
@@ -64,6 +83,14 @@ function fakeDb(options: { missingColumn?: string; queryFailure?: boolean; forei
             return { results: (columns[table] ?? []).filter(name => table + "." + name !== options.missingColumn).map(name => ({ name })) };
           }
           if (sql.includes("sqlite_master") && sql.includes("type='index'")) return { results: indexes.map(name => ({ name })) };
+          if (sql.includes("PRAGMA index_list(")) {
+            const table = sql.match(/PRAGMA index_list\(([^)]+)\)/)?.[1] ?? "";
+            return { results: (uniqueIndexes[table] ?? []).map((item, index) => ({ name: [...uniqueIndexInfo.entries()].find(([, columns]) => columns.join(",") === item.columns.join(","))?.[0] ?? table + "_unique_" + index, unique: item.unique })) };
+          }
+          if (sql.includes("PRAGMA index_info(")) {
+            const index = sql.match(/PRAGMA index_info\(([^)]+)\)/)?.[1] ?? "";
+            return { results: (uniqueIndexInfo.get(index) ?? []).map((name, seqno) => ({ name, seqno })) };
+          }
           if (sql.includes("PRAGMA foreign_key_check")) return { results: options.foreignKeyViolation ? [{ table: "configs" }] : [] };
           if (sql.includes("PRAGMA foreign_key_list(")) {
             const table = sql.match(/PRAGMA foreign_key_list\(([^)]+)\)/)?.[1] ?? "";
