@@ -28,13 +28,17 @@ const SENSITIVE_KEYS = new Set([
   "authorization",
   "apikey",
   "privatekey",
-  "access_token",
-  "refresh_token",
-  "client_secret",
+  "accesstoken",
+  "refreshtoken",
+  "clientsecret",
   "bootstrapsecret",
   "tokenhash",
-  "password_hash",
-  "cookie"
+  "passwordhash",
+  "cookie",
+  "credential",
+  "credentials",
+  "secretkey",
+  "signingkey"
 ]);
 
 export function sanitizeAuditMetadata(
@@ -44,7 +48,7 @@ export function sanitizeAuditMetadata(
 
   return Object.fromEntries(
     Object.entries(metadata).map(([key, value]) =>
-      SENSITIVE_KEYS.has(key.toLowerCase()) ? [key, "[redacted]"] : [key, value]
+      SENSITIVE_KEYS.has(key.toLowerCase().replace(/[^a-z0-9]/g, "")) ? [key, "[redacted]"] : [key, value]
     )
   );
 }
