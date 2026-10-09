@@ -27,6 +27,7 @@ const indexes = [
 ];
 
 const foreignKeys: Record<string, Array<{ from: string; table: string; to: string }>> = {
+  devices: [{ from: "user_id", table: "users", to: "id" }],
   configs: [
     { from: "user_id", table: "users", to: "id" },
     { from: "device_id", table: "devices", to: "id" },
