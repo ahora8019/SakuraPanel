@@ -48,6 +48,14 @@ export async function runPulse(env: Env): Promise<PulseReport> {
   const measuredAt = new Date().toISOString();
   const checks: PulseCheck[] = [];
 
+  const authConfigured = typeof env.AUTH_SECRET === "string" && env.AUTH_SECRET.length >= 32;
+  checks.push({
+    name: "authentication_configuration",
+    status: authConfigured ? "passed" : "failed",
+    durationMs: 0,
+    ...(!authConfigured ? { detail: "auth_secret_missing_or_too_short" } : {})
+  });
+
   if (!env.DB) {
     checks.push({ name: "database_connectivity", status: "unavailable", durationMs: null, detail: "database_binding_missing" });
     checks.push({ name: "database_schema", status: "skipped", durationMs: null, detail: "database_binding_missing" });
@@ -65,6 +73,18 @@ export async function runPulse(env: Env): Promise<PulseReport> {
     });
 
     if (connectivity.ok) {
+      const ownerCheck = await timeBounded(async () => {
+        const row = await env.DB!.prepare("SELECT COUNT(*) AS count FROM users WHERE role='OWNER' AND status='ACTIVE'").first<{ count: number }>();
+        return Number(row?.count ?? 0);
+      });
+      checks.push({
+        name: "active_owner_setup",
+        status: !ownerCheck.ok ? (ownerCheck.error === "timeout" ? "unavailable" : "failed") : ownerCheck.value! > 0 ? "passed" : "failed",
+        durationMs: ownerCheck.durationMs,
+        ...(!ownerCheck.ok ? { detail: ownerCheck.error === "timeout" ? "owner_check_timeout" : "owner_check_failed" } :
+          ownerCheck.value! === 0 ? { detail: "no_active_owner_configured" } : {})
+      });
+
       const schemaResult = await timeBounded(async () => {
         const tables = await env.DB!.prepare("SELECT name FROM sqlite_master WHERE type='table'").all<{ name: string }>();
         const names = new Set((tables.results ?? []).map(row => row.name));
