@@ -3,6 +3,8 @@ import { authenticateRequest } from "./security/security-middleware";
 import { UserApi } from "./api/user-api";
 import { DeviceApi } from "./api/device-api";
 import { ConfigApi } from "./api/config-api";
+import { ConfigGeneratorApi } from "./api/config-generator-api";
+import { ConfigCompatibilityApi } from "./api/config-compatibility-api";
 import { ConfigReleaseApi } from "./api/config-release-api";
 import { ConfigService } from "./core/config-service";
 import { D1ConfigRepository } from "./repositories/config-repository";
@@ -14,7 +16,7 @@ import { DeviceService } from "./core/device-service";
 import { D1UserRepository } from "./repositories/user-repository";
 import { D1DeviceRepository } from "./repositories/device-repository";
 import { SubscriptionApi } from "./api/subscription-api";
-import { PublicSubscriptionApi } from "./api/public-subscription-api";
+import { PublicSubscriptionApi, publicSubscriptionErrorResponse } from "./api/public-subscription-api";
 import { SubscriptionDeliveryService } from "./core/subscription-delivery";
 import { SubscriptionService } from "./core/subscription-service";
 import { D1SubscriptionRepository } from "./repositories/subscription-repository";
@@ -31,8 +33,20 @@ import { D1AuditRepository } from "./repositories/audit-repository";
 import { SubscriptionDiagnosticsService } from "./core/subscription-diagnostics";
 import { SubscriptionDiagnosticsApi } from "./api/subscription-diagnostics-api";
 import { AuditApi } from "./api/audit-api";
+import { isCookieMutationSameOrigin, limitRequestBody } from "./security/request-hardening";
 
 import type { Env } from "./types/env";
+
+
+export function decodePathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    // Invalid percent-encoding should behave like an unknown resource, not
+    // escape the Worker handler as an unhandled URIError.
+    return "";
+  }
+}
 
 export default {
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
@@ -59,11 +73,37 @@ export default {
         service: "sakurapanel",
         requestId,
         checks: {
-          database: readiness.database.status
+          database: readiness.database.status,
+          authentication: readiness.authentication.status,
+          bootstrapAuthentication: readiness.bootstrapAuthentication.status,
+          emergencyLock: readiness.emergencyLock.status
         }
       }, {
         status: readiness.ok ? 200 : 503,
         headers: { "cache-control": "no-store", "x-request-id": requestId }
+      });
+    }
+
+    if (!isCookieMutationSameOrigin(request)) {
+      return Response.json({ ok: false, error: "csrf_rejected" }, {
+        status: 403,
+        headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
+      });
+    }
+
+    try {
+      const boundedRequest = await limitRequestBody(request);
+      if (!boundedRequest) {
+        return Response.json({ ok: false, error: "request_body_too_large" }, {
+          status: 413,
+          headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
+        });
+      }
+      request = boundedRequest;
+    } catch {
+      return Response.json({ ok: false, error: "invalid_request_body" }, {
+        status: 400,
+        headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" }
       });
     }
 
@@ -73,12 +113,19 @@ export default {
 
     if (env.DB && url.pathname.startsWith("/internal/")) {
       const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
-      const decision = await new KvRateLimiter(env.DB).check(clientKey, 120, 60_000);
-      if (!decision.allowed) {
-        return Response.json(
-          { ok: false, error: "rate_limited" },
-          { status: 429, headers: { "retry-after": String(decision.retryAfterSeconds ?? 1), "cache-control": "no-store" } }
-        );
+      try {
+        const decision = await new KvRateLimiter(env.DB).check(clientKey, 120, 60_000);
+        if (!decision.allowed) {
+          return Response.json(
+            { ok: false, error: "rate_limited" },
+            { status: 429, headers: { "retry-after": String(decision.retryAfterSeconds ?? 1), "cache-control": "no-store" } }
+          );
+        }
+      } catch {
+        return Response.json({ ok: false, error: "service_unavailable" }, {
+          status: 503,
+          headers: { "cache-control": "no-store", "retry-after": "5" }
+        });
       }
     }
 
@@ -86,35 +133,69 @@ export default {
       try {
         await new EmergencyLock(env.SECURITY_KV).assertUnlocked();
       } catch {
-        return Response.json({ ok: false, error: "emergency_lock_active" }, { status: 503 });
-      }
-    }
-
-    const publicSubscriptionMatch = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{43})$/);
-    if (env.DB && publicSubscriptionMatch && request.method === "GET") {
-      const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
-      const decision = await new KvRateLimiter(env.DB).check(`public:${clientKey}`, 60, 60_000);
-      if (!decision.allowed) {
-        return Response.json({ ok: false, error: "rate_limited" }, {
-          status: 429,
-          headers: {
-            "retry-after": String(decision.retryAfterSeconds ?? 1),
-            "cache-control": "no-store"
-          }
+        if (/^\/s\/[A-Za-z0-9_-]{1,64}$/.test(url.pathname)) {
+          return publicSubscriptionErrorResponse("emergency_lock_active", 503, { "retry-after": "5" });
+        }
+        return Response.json({ ok: false, error: "emergency_lock_active" }, {
+          status: 503,
+          headers: { "cache-control": "no-store", "retry-after": "5" }
         });
       }
-
-      const publicSubscriptionApi = new PublicSubscriptionApi(
-        new SubscriptionDeliveryService(
-          new D1SubscriptionRepository(env.DB),
-          new D1ConfigRepository(env.DB)
-        )
-      );
-      return publicSubscriptionApi.get(publicSubscriptionMatch[1]);
     }
 
-    if (!env.AUTH_SECRET) {
-      return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
+    const publicSubscriptionMatch = url.pathname.match(/^\/s\/([A-Za-z0-9_-]{1,64})$/);
+    if (publicSubscriptionMatch) {
+      if (request.method !== "GET") {
+        return publicSubscriptionErrorResponse("not_found", 404);
+      }
+
+      if (!env.DB) {
+        return publicSubscriptionErrorResponse("service_not_configured", 503, { "retry-after": "5" });
+      }
+
+      if (url.search.length > 2048) {
+        return publicSubscriptionErrorResponse("validation_failed", 400);
+      }
+
+      if (publicSubscriptionMatch[1].length !== 43) {
+        return publicSubscriptionErrorResponse("not_found", 404);
+      }
+
+      const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
+      try {
+        const decision = await new KvRateLimiter(env.DB).check(`public:${clientKey}`, 60, 60_000);
+        if (!decision.allowed) {
+          return publicSubscriptionErrorResponse("rate_limited", 429, {
+            "retry-after": String(decision.retryAfterSeconds ?? 1),
+            "x-ratelimit-limit": "60",
+            "x-ratelimit-remaining": "0"
+          });
+        }
+
+        const publicSubscriptionApi = new PublicSubscriptionApi(
+          new SubscriptionDeliveryService(
+            new D1SubscriptionRepository(env.DB),
+            new D1ConfigRepository(env.DB)
+          )
+        );
+        const response = await publicSubscriptionApi.get(publicSubscriptionMatch[1], url.searchParams);
+        response.headers.set("x-ratelimit-limit", "60");
+        response.headers.set("x-ratelimit-remaining", String(decision.remaining));
+        return response;
+      } catch (error) {
+        console.error(JSON.stringify({
+          event: "public_subscription_failure",
+          code: error instanceof Error ? error.message : "unknown_error"
+        }));
+        return publicSubscriptionErrorResponse("service_unavailable", 503, { "retry-after": "5" });
+      }
+    }
+
+    if (typeof env.AUTH_SECRET !== "string" || env.AUTH_SECRET.length < 32) {
+      return Response.json({ ok: false, error: "service_not_configured" }, {
+        status: 503,
+        headers: { "cache-control": "no-store", "retry-after": "5" }
+      });
     }
 
     const auth = new AuthService(env.AUTH_SECRET);
@@ -145,7 +226,16 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
  }catch(err){out.textContent=String(err)}
 });
 </script></body></html>`, {
-        headers: { "content-type": "text/html; charset=UTF-8", "cache-control": "no-store" }
+        headers: {
+          "content-type": "text/html; charset=UTF-8",
+          "cache-control": "no-store",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "DENY",
+          "referrer-policy": "strict-origin-when-cross-origin",
+          "permissions-policy": "camera=(), microphone=(), geolocation=()",
+          "cross-origin-resource-policy": "same-origin",
+          "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'"
+        }
       });
     }
 
@@ -159,11 +249,18 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       (url.pathname === "/internal/bootstrap/session" && request.method === "POST")
     )) {
       const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
-      const decision = await new KvRateLimiter(env.DB).check(`auth:${clientKey}`, 10, 60_000);
-      if (!decision.allowed) {
-        return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), {
-          status: 429,
-          headers: { "content-type": "application/json", "retry-after": String(decision.retryAfterSeconds ?? 1), "cache-control": "no-store" }
+      try {
+        const decision = await new KvRateLimiter(env.DB).check(`auth:${clientKey}`, 10, 60_000);
+        if (!decision.allowed) {
+          return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), {
+            status: 429,
+            headers: { "content-type": "application/json", "retry-after": String(decision.retryAfterSeconds ?? 1), "cache-control": "no-store" }
+          });
+        }
+      } catch {
+        return Response.json({ ok: false, error: "service_unavailable" }, {
+          status: 503,
+          headers: { "cache-control": "no-store", "retry-after": "5" }
         });
       }
     }
@@ -186,7 +283,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     }
 
     if (url.pathname === "/owner/login" && request.method === "POST") {
-      if (!env.DB || !env.BOOTSTRAP_SECRET) return new Response("Service not configured", { status: 503 });
+      if (!env.DB || typeof env.BOOTSTRAP_SECRET !== "string" || env.BOOTSTRAP_SECRET.length < 32) return new Response("Service not configured", { status: 503 });
 
       let form: FormData;
       try { form = await request.formData(); }
@@ -225,7 +322,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     }
 
     if (url.pathname === "/internal/bootstrap" && request.method === "POST") {
-      if (!env.DB || !env.BOOTSTRAP_SECRET) return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
+      if (!env.DB || typeof env.BOOTSTRAP_SECRET !== "string" || env.BOOTSTRAP_SECRET.length < 32) return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
 
       const existing = await env.DB.prepare("SELECT COUNT(*) AS count FROM users").first<{ count: number }>();
       if ((existing?.count ?? 0) > 0) return Response.json({ ok: false, error: "bootstrap_already_completed" }, { status: 409 });
@@ -283,11 +380,18 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
         throw error;
       }
 
-      return Response.json({ ok: true, value: { user, session: { expiresAt: expiresIso }, token } }, { status: 201 });
+      return Response.json({ ok: true, value: { user, session: { expiresAt: expiresIso }, token } }, {
+        status: 201,
+        headers: {
+          "cache-control": "no-store, private",
+          "pragma": "no-cache",
+          "x-content-type-options": "nosniff"
+        }
+      });
     }
 
     if (url.pathname === "/internal/bootstrap/session" && request.method === "POST") {
-      if (!env.DB || !env.BOOTSTRAP_SECRET) return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
+      if (!env.DB || typeof env.BOOTSTRAP_SECRET !== "string" || env.BOOTSTRAP_SECRET.length < 32) return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
 
       let body: unknown;
       try {
@@ -312,9 +416,6 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       }
 
       const username = ((body as Record<string, unknown>).username as string).trim();
-      const existingUsers = await env.DB.prepare("SELECT 1 AS present FROM users LIMIT 1").first<{ present: number }>();
-      if (existingUsers) return Response.json({ ok: false, error: "bootstrap_already_completed" }, { status: 409 });
-
       const owner = await env.DB.prepare(
         "SELECT id, username, role, status, security_version FROM users WHERE username = ? AND role = 'OWNER' LIMIT 1"
       ).bind(username).first<{id:string;username:string;role:"OWNER";status:"ACTIVE";security_version:number}>();
@@ -336,10 +437,25 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       return Response.json({
         ok: true,
         value: { user: { id: owner.id, username: owner.username, role: owner.role }, session: { expiresAt: expiresIso }, token }
-      }, { status: 201 });
+      }, {
+        status: 201,
+        headers: {
+          "cache-control": "no-store, private",
+          "pragma": "no-cache",
+          "x-content-type-options": "nosniff"
+        }
+      });
     }
 
-    const context = await authenticateRequest(request, auth, env.DB);
+    let context: Awaited<ReturnType<typeof authenticateRequest>> = null;
+    try {
+      context = await authenticateRequest(request, auth, env.DB);
+    } catch {
+      return Response.json({ ok: false, error: "service_unavailable" }, {
+        status: 503,
+        headers: { "cache-control": "no-store", "retry-after": "5" }
+      });
+    }
     const userRepository = new D1UserRepository(env.DB!);
     const deviceRepository = new D1DeviceRepository(env.DB!);
     const templateRepository = new D1TemplateRepository(env.DB!);
@@ -358,6 +474,8 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     const deviceApi = new DeviceApi(deviceService);
     const templateApi = new TemplateApi(templateService);
     const configApi = new ConfigApi(configService);
+    const configGeneratorApi = new ConfigGeneratorApi(configService, templateService, subscriptionService);
+    const configCompatibilityApi = new ConfigCompatibilityApi(configService);
     const configReleaseService = new ConfigReleaseService(
       configRepository,
       new D1ConfigReleaseRepository(env.DB!),
@@ -391,7 +509,13 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     if (templateStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return templateApi.updateStatus(context, decodeURIComponent(templateStatusMatch[1]), body);
+      return templateApi.updateStatus(context, decodePathSegment(templateStatusMatch[1]), body);
+    }
+
+    if (url.pathname === "/internal/config-generator" && request.method === "POST") {
+      let body: unknown;
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return configGeneratorApi.generate(context, body);
     }
 
     if (url.pathname === "/internal/configs" && request.method === "GET") {
@@ -403,12 +527,17 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       return configApi.generate(context, body);
     }
 
+    const configCompatibilityMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/compatibility$/);
+    if (configCompatibilityMatch && request.method === "GET") {
+      return configCompatibilityApi.get(context, decodePathSegment(configCompatibilityMatch[1]), url.searchParams);
+    }
+
     const configMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)$/);
-    if (configMatch && request.method === "GET") return configApi.get(context, decodeURIComponent(configMatch[1]));
+    if (configMatch && request.method === "GET") return configApi.get(context, decodePathSegment(configMatch[1]));
 
     const configReleaseListMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/releases$/);
     if (configReleaseListMatch && request.method === "GET") {
-      return configReleaseApi.list(context, decodeURIComponent(configReleaseListMatch[1]));
+      return configReleaseApi.list(context, decodePathSegment(configReleaseListMatch[1]));
     }
 
     const configReleasePublishMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/releases\/publish$/);
@@ -416,7 +545,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       const version = body && typeof body === "object" ? Number((body as Record<string, unknown>).version) : NaN;
-      return configReleaseApi.publish(context, decodeURIComponent(configReleasePublishMatch[1]), version);
+      return configReleaseApi.publish(context, decodePathSegment(configReleasePublishMatch[1]), version);
     }
 
     const configReleaseRollbackMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/releases\/rollback$/);
@@ -424,14 +553,14 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       const version = body && typeof body === "object" ? Number((body as Record<string, unknown>).version) : NaN;
-      return configReleaseApi.rollback(context, decodeURIComponent(configReleaseRollbackMatch[1]), version);
+      return configReleaseApi.rollback(context, decodePathSegment(configReleaseRollbackMatch[1]), version);
     }
 
     const configStatusMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/status$/);
     if (configStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return configApi.updateStatus(context, decodeURIComponent(configStatusMatch[1]), body);
+      return configApi.updateStatus(context, decodePathSegment(configStatusMatch[1]), body);
     }
 
     if (url.pathname === "/internal/subscriptions" && request.method === "GET") {
@@ -445,32 +574,32 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
 
     const subscriptionDiagnosticsMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/diagnostics$/);
     if (subscriptionDiagnosticsMatch && request.method === "GET") {
-      return subscriptionDiagnosticsApi.get(context, decodeURIComponent(subscriptionDiagnosticsMatch[1]));
+      return subscriptionDiagnosticsApi.get(context, decodePathSegment(subscriptionDiagnosticsMatch[1]), url.searchParams);
     }
 
     const subscriptionTokenRotateMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/token\/rotate$/);
     if (subscriptionTokenRotateMatch && request.method === "POST") {
-      return subscriptionApi.rotateToken(context, decodeURIComponent(subscriptionTokenRotateMatch[1]));
+      return subscriptionApi.rotateToken(context, decodePathSegment(subscriptionTokenRotateMatch[1]));
     }
 
     const subscriptionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)$/);
-    if (subscriptionMatch && request.method === "GET") return subscriptionApi.get(context, decodeURIComponent(subscriptionMatch[1]));
+    if (subscriptionMatch && request.method === "GET") return subscriptionApi.get(context, decodePathSegment(subscriptionMatch[1]));
 
     const subscriptionProvisionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/provision$/);
     if (subscriptionProvisionMatch && request.method === "POST") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return subscriptionApi.provision(context, decodeURIComponent(subscriptionProvisionMatch[1]), body);
+      return subscriptionApi.provision(context, decodePathSegment(subscriptionProvisionMatch[1]), body);
     }
 
     const subscriptionRebuildMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/rebuild$/);
-    if (subscriptionRebuildMatch && request.method === "POST") return subscriptionApi.rebuild(context, decodeURIComponent(subscriptionRebuildMatch[1]));
+    if (subscriptionRebuildMatch && request.method === "POST") return subscriptionApi.rebuild(context, decodePathSegment(subscriptionRebuildMatch[1]));
 
     const subscriptionStatusMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/status$/);
     if (subscriptionStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return subscriptionApi.updateStatus(context, decodeURIComponent(subscriptionStatusMatch[1]), body);
+      return subscriptionApi.updateStatus(context, decodePathSegment(subscriptionStatusMatch[1]), body);
     }
 
     if (url.pathname === "/internal/users" && request.method === "GET") return userApi.list(context);
@@ -484,11 +613,11 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     if (userStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return userApi.updateStatus(context, decodeURIComponent(userStatusMatch[1]), body);
+      return userApi.updateStatus(context, decodePathSegment(userStatusMatch[1]), body);
     }
 
     const userDevicesMatch = url.pathname.match(/^\/internal\/users\/([^/]+)\/devices$/);
-    if (userDevicesMatch && request.method === "GET") return deviceApi.list(context, decodeURIComponent(userDevicesMatch[1]));
+    if (userDevicesMatch && request.method === "GET") return deviceApi.list(context, decodePathSegment(userDevicesMatch[1]));
 
     if (url.pathname === "/internal/devices" && request.method === "POST") {
       let body: unknown;
@@ -500,7 +629,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     if (deviceStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return deviceApi.updateStatus(context, decodeURIComponent(deviceStatusMatch[1]), body);
+      return deviceApi.updateStatus(context, decodePathSegment(deviceStatusMatch[1]), body);
     }
 
     return Response.json({ ok: false, error: "not_found" }, { status: 404 });

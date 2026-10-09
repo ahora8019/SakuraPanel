@@ -1,12 +1,38 @@
 import type { GeneratedConfig } from "../models/config";
-import type { ConfigCompatibility, ClientPlatform, ClientProtocol } from "../models/config-compatibility";
+import type {
+  CompatibilityFeature,
+  CompatibilityMatrix,
+  CompatibilityMatrixEntry,
+  CompatibilityMatrixTarget,
+  ConfigCompatibility,
+  ClientPlatform,
+  ClientProtocol
+} from "../models/config-compatibility";
+import { findClientDefinition } from "./client-compatibility-registry";
 
 const PLATFORMS: readonly ClientPlatform[] = ["ANDROID", "IOS", "WINDOWS", "MACOS", "LINUX", "OTHER"];
 const PROTOCOLS: readonly ClientProtocol[] = ["VLESS", "VMESS", "TROJAN", "SHADOWSOCKS", "OTHER"];
+const FEATURES: readonly CompatibilityFeature[] = ["TCP", "TLS", "REALITY", "WEBSOCKET", "GRPC", "HTTP2", "QUIC"];
+const VERSION_PATTERN = /^\d+(?:\.\d+){0,3}$/;
+
+function compareVersions(left: string, right: string): number {
+  const a = left.split(".").map(Number);
+  const b = right.split(".").map(Number);
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i += 1) {
+    const delta = (a[i] ?? 0) - (b[i] ?? 0);
+    if (delta !== 0) return delta < 0 ? -1 : 1;
+  }
+  return 0;
+}
 
 export interface CompatibilityResult {
   compatible: boolean;
   reasons: string[];
+}
+
+function isFeature(value: unknown): value is CompatibilityFeature {
+  return typeof value === "string" && FEATURES.includes(value as CompatibilityFeature);
 }
 
 export function validateCompatibilityMetadata(metadata: unknown): string[] {
@@ -24,7 +50,13 @@ export function validateCompatibilityMetadata(metadata: unknown): string[] {
     errors.push("compatibility_client_name_invalid");
   }
 
-  if (value.minVersion !== undefined && (typeof value.minVersion !== "string" || value.minVersion.length === 0 || value.minVersion.length > 32)) {
+  if (value.features !== undefined &&
+      (!Array.isArray(value.features) || value.features.length > FEATURES.length || value.features.some(feature => !isFeature(feature)))) {
+    errors.push("compatibility_features_invalid");
+  }
+
+  if (value.minVersion !== undefined &&
+      (typeof value.minVersion !== "string" || value.minVersion.length > 32 || !VERSION_PATTERN.test(value.minVersion))) {
     errors.push("compatibility_min_version_invalid");
   }
   if (value.notes !== undefined && (typeof value.notes !== "string" || value.notes.length > 500)) {
@@ -48,8 +80,161 @@ export function evaluateCompatibility(config: GeneratedConfig, target: ConfigCom
 
   if (target.clients.length > 0) {
     const clients = value.clients as string[];
-    if (!target.clients.some(client => clients.includes(client))) return { compatible: false, reasons: ["client_mismatch"] };
+    if (!target.clients.some(client =>
+      clients.some(name => name.trim().toLowerCase() === client.trim().toLowerCase())
+    )) return { compatible: false, reasons: ["client_mismatch"] };
+  }
+
+  if (target.features?.length) {
+    const declaredFeatures = value.features as CompatibilityFeature[] | undefined;
+    if (!declaredFeatures) return { compatible: false, reasons: ["compatibility_features_unknown"] };
+    if (target.features.some(feature => !declaredFeatures.includes(feature))) {
+      return { compatible: false, reasons: ["feature_mismatch"] };
+    }
   }
 
   return { compatible: true, reasons: [] };
+}
+
+export interface CompatibilityMatrixOptions {
+  now?: string;
+}
+
+export function evaluateCompatibilityMatrix(
+  config: GeneratedConfig,
+  target: CompatibilityMatrixTarget,
+  options: { now?: string } = {}
+): CompatibilityMatrix {
+  const metadata = config.payload.compatibility;
+  const validationErrors = validateCompatibilityMetadata(metadata);
+  const generatedAt = options.now ?? new Date().toISOString();
+
+  if (validationErrors.length > 0) {
+    return {
+      configId: config.id,
+      generatedAt,
+      entries: target.clients.map(client => ({
+        client,
+        platform: target.platform,
+        protocol: target.protocol,
+        status: "unknown",
+        reasons: validationErrors,
+        supportedFeatures: [],
+        unsupportedFeatures: []
+      }))
+    };
+  }
+
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return {
+      configId: config.id,
+      generatedAt,
+      entries: target.clients.map(client => ({
+        client,
+        platform: target.platform,
+        protocol: target.protocol,
+        status: "unknown",
+        reasons: ["compatibility_metadata_missing"],
+        supportedFeatures: [],
+        unsupportedFeatures: []
+      }))
+    };
+  }
+
+  const value = metadata as Record<string, unknown>;
+  const entries: CompatibilityMatrixEntry[] = target.clients.map(client => {
+    const definition = findClientDefinition(client);
+    const reasons: string[] = [];
+    const supportedFeatures: CompatibilityFeature[] = [];
+    const unsupportedFeatures: CompatibilityFeature[] = [];
+
+    if (!definition) {
+      return {
+        client,
+        platform: target.platform,
+        protocol: target.protocol,
+        status: "unknown",
+        reasons: ["client_unknown"],
+        supportedFeatures,
+        unsupportedFeatures
+      };
+    }
+
+    if (!definition.platforms.includes(target.platform)) reasons.push("platform_unsupported");
+    if (!definition.protocols.includes(target.protocol)) reasons.push("protocol_unsupported");
+
+    if (value.platform !== target.platform) reasons.push("platform_mismatch");
+    if (value.protocol !== target.protocol) reasons.push("protocol_mismatch");
+
+    let clientVersionUnknown = false;
+    const minimumVersion = [value.minVersion, definition.minVersion]
+      .filter((version): version is string => typeof version === "string")
+      .sort((a, b) => compareVersions(b, a))[0];
+    if (minimumVersion) {
+      if (!target.clientVersion) {
+        clientVersionUnknown = true;
+        reasons.push("client_version_required");
+      } else if (compareVersions(target.clientVersion, minimumVersion) < 0) {
+        reasons.push("client_version_too_old");
+      }
+    }
+
+    const declaredClients = value.clients as string[];
+    if (!declaredClients.some(name => name.trim().toLowerCase() === client.trim().toLowerCase())) {
+      reasons.push("client_not_declared");
+    }
+
+    const declaredFeatures = value.features as CompatibilityFeature[] | undefined;
+    const requestedFeatures = target.features ?? [];
+    const requiredFeatures = Array.from(new Set([
+      ...(declaredFeatures ?? []),
+      ...requestedFeatures
+    ]));
+    const configFeatureSupportUnknown = requestedFeatures.length > 0 && declaredFeatures === undefined;
+    if (configFeatureSupportUnknown) reasons.push("config_features_unknown");
+
+    for (const feature of requiredFeatures) {
+      const clientSupports = definition.features.includes(feature);
+      const configDeclares = declaredFeatures?.includes(feature) ?? false;
+      if (!clientSupports) {
+        unsupportedFeatures.push(feature);
+        if (!reasons.includes("feature_unsupported")) reasons.push("feature_unsupported");
+      }
+      if (requestedFeatures.includes(feature) && declaredFeatures !== undefined && !configDeclares) {
+        if (!unsupportedFeatures.includes(feature)) unsupportedFeatures.push(feature);
+        if (!reasons.includes("config_feature_missing")) reasons.push("config_feature_missing");
+      }
+      if (configDeclares && clientSupports) {
+        supportedFeatures.push(feature);
+      }
+    }
+
+    const isIncompatible =
+      reasons.includes("platform_mismatch") ||
+      reasons.includes("protocol_mismatch") ||
+      reasons.includes("platform_unsupported") ||
+      reasons.includes("protocol_unsupported") ||
+      reasons.includes("client_not_declared") ||
+      reasons.includes("client_version_too_old");
+    const status =
+      isIncompatible
+        ? "incompatible"
+        : configFeatureSupportUnknown || clientVersionUnknown
+          ? "unknown"
+          : unsupportedFeatures.length > 0
+            ? "partial"
+            : "compatible";
+
+    return {
+      client,
+      platform: target.platform,
+      protocol: target.protocol,
+      status,
+      reasons,
+      supportedFeatures,
+      unsupportedFeatures
+    };
+  });
+
+  return { configId: config.id, generatedAt, entries };
 }

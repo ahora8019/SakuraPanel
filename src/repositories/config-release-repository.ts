@@ -3,7 +3,7 @@ import type { ConfigRelease, ConfigReleaseStatus } from "../models/config-releas
 export interface ConfigReleaseRepository {
   find(configId: string, version: number): Promise<ConfigRelease | null>;
   list(configId: string): Promise<ConfigRelease[]>;
-  publish(configId: string, version: number, actorId: string, now: string): Promise<ConfigRelease>;
+  publish(configId: string, version: number, actorId: string, now: string, operation: "PUBLISH" | "ROLLBACK"): Promise<ConfigRelease>;
 }
 
 function mapRelease(row: Record<string, unknown>): ConfigRelease {
@@ -36,12 +36,14 @@ export class D1ConfigReleaseRepository implements ConfigReleaseRepository {
     return result.results.map(mapRelease);
   }
 
-  async publish(configId: string, version: number, actorId: string, now: string): Promise<ConfigRelease> {
+  async publish(configId: string, version: number, actorId: string, now: string, operation: "PUBLISH" | "ROLLBACK"): Promise<ConfigRelease> {
     const id = crypto.randomUUID();
     await this.db.batch([
       this.db.prepare(
-        "UPDATE config_releases SET status='ROLLED_BACK', rolled_back_at=? WHERE config_id=? AND status='PUBLISHED'"
-      ).bind(now, configId),
+        operation === "ROLLBACK"
+          ? "UPDATE config_releases SET status='ROLLED_BACK', rolled_back_at=? WHERE config_id=? AND status='PUBLISHED' AND version<>?"
+          : "UPDATE config_releases SET status='SUPERSEDED', rolled_back_at=NULL WHERE config_id=? AND status='PUBLISHED' AND version<>?"
+      ).bind(...(operation === "ROLLBACK" ? [now, configId, version] : [configId, version])),
       this.db.prepare(
         "INSERT INTO config_releases (id,config_id,version,status,actor_id,created_at,published_at,rolled_back_at) VALUES (?,?,?,?,?,?,?,NULL) ON CONFLICT(config_id,version) DO UPDATE SET status='PUBLISHED',actor_id=excluded.actor_id,published_at=excluded.published_at,rolled_back_at=NULL"
       ).bind(id, configId, version, "PUBLISHED", actorId, now, now),

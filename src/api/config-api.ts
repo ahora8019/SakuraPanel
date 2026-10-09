@@ -71,7 +71,7 @@ function statusFor(error: unknown): number {
   const code = error instanceof Error ? error.message : "";
   if (code === "forbidden" || code === "user_not_active") return 403;
   if (code === "not_found" || code === "template_not_found") return 404;
-  if (code === "conflict") return 409;
+  if (code === "conflict" || code === "config_revoked_terminal") return 409;
   if (code === "validation_failed" || code.includes("required") || code === "template_not_active" || code === "invalid_expiration" || code === "device_not_owned") return 400;
   return 500;
 }

@@ -18,10 +18,14 @@ export function errorResponse(error: unknown, status = 500): Response {
     "subscription_not_found",
     "subscription_expired",
     "subscription_not_active",
+    "subscription_revoked_terminal",
     "no_eligible_configs",
     "version_not_found",
     "release_not_found",
-    "service_not_configured"
+    "service_not_configured",
+    "owner_status_protected",
+    "config_revoked_terminal",
+    "subscription_revoked_terminal"
   ]);
   const publicCode = safeCodes.has(code) ? code : "internal_error";
   return Response.json({ ok: false, error: publicCode }, {

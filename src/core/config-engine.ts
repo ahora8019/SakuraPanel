@@ -6,6 +6,7 @@ export interface ConfigGenerationContext {
   template: ConfigTemplate;
   expiresAt?: string;
   now?: string;
+  payloadOverrides?: Record<string, unknown>;
 }
 
 export class ConfigEngine {
@@ -18,6 +19,7 @@ export class ConfigEngine {
 
     const payload = {
       ...context.template.definition,
+      ...(context.payloadOverrides ?? {}),
       identity: {
         userId: context.identity.userId,
         ...(context.identity.deviceId ? { deviceId: context.identity.deviceId } : {})

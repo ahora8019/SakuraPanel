@@ -5,6 +5,7 @@ export interface ConfigRepository {
   listByUserId(userId: string): Promise<GeneratedConfig[]>;
   listByIds(ids: string[]): Promise<GeneratedConfig[]>;
   save(config: GeneratedConfig): Promise<void>;
+  saveMany?(configs: GeneratedConfig[]): Promise<void>;
   updateStatus(id: string, status: ConfigStatus, updatedAt: string): Promise<boolean>;
   getLatestVersion(configId: string): Promise<number>;
   saveVersion(configId: string, version: number, payload: Record<string, unknown>, createdAt: string): Promise<void>;
@@ -80,10 +81,32 @@ export class D1ConfigRepository implements ConfigRepository {
     await this.db.batch([insertConfig, insertVersion]);
   }
 
+  async saveMany(configs: GeneratedConfig[]): Promise<void> {
+    if (configs.length === 0) return;
+    if (configs.length > 100) throw new Error("validation_failed");
+    const configRows = configs.map(() => "(?,?,?,?,?,?,?,?,?,1)").join(",");
+    const configValues = configs.flatMap(config => [
+      config.id, config.userId, config.deviceId ?? null, config.templateId, config.templateVersion,
+      config.status, config.expiresAt ?? null, config.createdAt, config.createdAt
+    ]);
+    const versionRows = configs.map(() => "(?,?,?,?,?)").join(",");
+    const versionValues = configs.flatMap(config => [
+      crypto.randomUUID(), config.id, 1, JSON.stringify(config.payload), config.createdAt
+    ]);
+    await this.db.batch([
+      this.db.prepare(
+        "INSERT INTO configs (id,user_id,device_id,template_id,template_version,status,expires_at,created_at,updated_at,published_version) VALUES " + configRows
+      ).bind(...configValues),
+      this.db.prepare(
+        "INSERT INTO config_versions (id,config_id,version,payload,created_at) VALUES " + versionRows
+      ).bind(...versionValues)
+    ]);
+  }
+
   async updateStatus(id: string, status: ConfigStatus, updatedAt: string): Promise<boolean> {
     const result = await this.db.prepare(
-      "UPDATE configs SET status=?, updated_at=? WHERE id=?"
-    ).bind(status, updatedAt, id).run();
+      "UPDATE configs SET status=?, updated_at=? WHERE id=? AND (status<>'REVOKED' OR ?='REVOKED')"
+    ).bind(status, updatedAt, id, status).run();
     return result.meta.changes > 0;
   }
 

@@ -102,4 +102,44 @@ describe("application integration flow", () => {
     expect(v2.version).toBe(2);
     expect(v2.configIds).toEqual(v1.configIds);
   });
+  it("rejects token rotation for a malformed subscription expiry", async () => {
+    const subscriptionRepo = new MemorySubscriptionRepository();
+    subscriptionRepo.subscriptions.set("sub-invalid", {
+      id: "sub-invalid",
+      userId: "user-1",
+      status: "ACTIVE",
+      expiresAt: "not-a-date",
+      publicTokenHash: "existing-hash",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    });
+    const service = new SubscriptionService(subscriptionRepo, new MemoryConfigRepository());
+
+    await expect(service.rotateAccessToken("sub-invalid", "2026-01-01T00:01:00.000Z"))
+      .rejects.toThrow("subscription_expired");
+  });
+
+  it("does not reactivate revoked subscriptions or expired subscriptions", async () => {
+    const subscriptionRepo = new MemorySubscriptionRepository();
+    subscriptionRepo.subscriptions.set("sub-revoked", {
+      id: "sub-revoked", userId: "user-1", status: "REVOKED",
+      expiresAt: "2026-12-01T00:00:00.000Z", publicTokenHash: "old-token-hash",
+      createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z"
+    });
+    subscriptionRepo.subscriptions.set("sub-expired", {
+      id: "sub-expired", userId: "user-1", status: "EXPIRED",
+      expiresAt: "2026-01-01T00:00:00.000Z", publicTokenHash: "expired-token-hash",
+      createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z"
+    });
+    const service = new SubscriptionService(subscriptionRepo, new MemoryConfigRepository());
+
+    await expect(service.updateStatus("sub-revoked", "ACTIVE", "2026-10-09T00:00:00.000Z"))
+      .rejects.toThrow("subscription_revoked_terminal");
+    await expect(service.updateStatus("sub-expired", "ACTIVE", "2026-10-09T00:00:00.000Z"))
+      .rejects.toThrow("subscription_expired");
+
+    expect((await subscriptionRepo.findById("sub-revoked"))?.status).toBe("REVOKED");
+    expect((await subscriptionRepo.findById("sub-expired"))?.status).toBe("EXPIRED");
+  });
+
 });

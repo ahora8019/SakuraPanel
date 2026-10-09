@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { AuthService } from "../src/security/auth";
 import { hasPermission } from "../src/security/permissions";
 import { AbuseDetector } from "../src/security/abuse-detection";
-import { createAuditEvent } from "../src/security/audit";
+import { createAuditEvent, sanitizeAuditMetadata } from "../src/security/audit";
 import { SessionService } from "../src/security/session-service";
 import type { SessionRecord, SessionRepository } from "../src/repositories/session-repository";
 import type { UserRecord } from "../src/repositories/user-repository";
@@ -32,6 +32,14 @@ describe("security core", () => {
     const token = await auth.issueToken(principalBase, 60, 1000);
 
     expect(await auth.verifyToken(token, 1060)).toBeNull();
+  });
+
+
+  it("rejects valid JSON tokens whose header or payload is not an object", async () => {
+    const auth = new AuthService("12345678901234567890123456789012");
+    expect(await auth.verifyToken("bnVsbA.bnVsbA.invalid-signature")).toBeNull();
+    expect(await auth.verifyToken("e30.bnVsbA.invalid-signature")).toBeNull();
+    expect(await auth.verifyToken("bnVsbA.e30.invalid-signature")).toBeNull();
   });
 
   it("rejects oversized bearer tokens before parsing", async () => {
@@ -163,6 +171,25 @@ describe("security core", () => {
     await expect(lock.assertUnlocked()).rejects.toThrow("emergency_lock_active");
     await lock.unlock();
     await expect(lock.assertUnlocked()).resolves.toBeUndefined();
+  });
+
+  it("redacts normalized secret-like audit metadata keys", () => {
+    const metadata = sanitizeAuditMetadata({
+      token: "raw-token",
+      apiKey: "api-secret",
+      private_key: "private-secret",
+      bootstrapSecret: "bootstrap-secret",
+      passwordResetToken: "reset-secret",
+      safeLabel: "visible"
+    });
+    expect(metadata).toEqual({
+      token: "[redacted]",
+      apiKey: "[redacted]",
+      private_key: "[redacted]",
+      bootstrapSecret: "[redacted]",
+      passwordResetToken: "[redacted]",
+      safeLabel: "visible"
+    });
   });
 
 });

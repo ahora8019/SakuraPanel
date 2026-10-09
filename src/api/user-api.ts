@@ -43,5 +43,5 @@ function isStatusBody(value: unknown): value is { status: UserStatus } {
 }
 function statusFor(error: unknown): number {
   const code = error instanceof Error ? error.message : "";
-  return code === "forbidden" ? 403 : code === "not_found" ? 404 : code === "conflict" ? 409 : code === "validation_failed" ? 400 : 500;
+  return code === "forbidden" ? 403 : code === "not_found" ? 404 : code === "conflict" || code === "owner_status_protected" ? 409 : code === "validation_failed" ? 400 : 500;
 }

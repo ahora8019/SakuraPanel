@@ -28,7 +28,7 @@ export class SubscriptionApi {
       const ctx = requirePermission(context, "subscription:write");
       if (!isCreateBody(body)) throw new Error("validation_failed");
       const userId = ctx.principal.role === "MEMBER" ? ctx.principal.userId : body.userId;
-      const result = await this.service.create(userId, body.expiresAt);
+      const result = await this.service.create(userId, body.expiresAt, undefined, body.name ?? "Subscription");
       return Response.json({
         ok: true,
         value: toPublicSubscription(result.subscription),
@@ -87,6 +87,7 @@ function toPublicSubscription(subscription: Awaited<ReturnType<SubscriptionServi
   return {
     id: subscription.id,
     userId: subscription.userId,
+    name: subscription.name,
     status: subscription.status,
     ...(subscription.expiresAt ? { expiresAt: subscription.expiresAt } : {}),
     createdAt: subscription.createdAt,
@@ -104,10 +105,11 @@ function isProvisionBody(value: unknown): value is {
     (b.expiresAt === undefined || typeof b.expiresAt === "string");
 }
 
-function isCreateBody(value: unknown): value is { userId: string; expiresAt?: string } {
+function isCreateBody(value: unknown): value is { userId: string; expiresAt?: string; name?: string } {
   if (!value || typeof value !== "object") return false;
   const b = value as Record<string, unknown>;
-  return typeof b.userId === "string" && (b.expiresAt === undefined || typeof b.expiresAt === "string");
+  return typeof b.userId === "string" && (b.expiresAt === undefined || typeof b.expiresAt === "string") &&
+    (b.name === undefined || typeof b.name === "string");
 }
 
 function isStatusBody(value: unknown): value is { status: SubscriptionStatus } {
@@ -120,7 +122,7 @@ function statusFor(error: unknown): number {
   const code = error instanceof Error ? error.message : "";
   if (code === "forbidden" || code === "user_not_active") return 403;
   if (code === "not_found" || code === "subscription_not_found" || code === "template_not_found") return 404;
-  if (code === "conflict") return 409;
+  if (code === "conflict" || code === "subscription_revoked_terminal") return 409;
   if (code === "validation_failed" || code === "invalid_expiration" || code === "subscription_expired" || code === "subscription_not_active" || code === "no_eligible_configs" || code === "device_not_owned") return 400;
   return 500;
 }

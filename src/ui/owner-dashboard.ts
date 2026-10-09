@@ -35,18 +35,26 @@ pre{white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto}@m
 <div id="templatesList"></div></div>
 
 <div class="card">
-<h2>2. Config Engine</h2>
-<p class="muted">Configs are generated from a template plus user/device identity. There is no endpoint dependency.</p>
+<h2>2. Config Generator</h2>
+<p class="muted">Choose a protocol preset, set the port and subscription name, then generate 1–100 configs.</p>
 <form id="configForm">
-<input name="userId" placeholder="User ID" required>
-<input name="deviceId" placeholder="Optional Device ID">
-<input name="templateId" placeholder="Template ID" required>
-<input name="expiresAt" type="datetime-local">
-<button>Generate Config</button></form><div id="configsList"></div></div>
+<label for="generatorProtocol">Protocol</label>
+<select id="generatorProtocol" name="protocol" required>
+<option value="VLESS">VLESS</option><option value="VMess">VMess</option><option value="Trojan">Trojan</option><option value="Shadowsocks">Shadowsocks</option>
+</select>
+<div class="row">
+<div><label for="generatorPort">Port</label><input id="generatorPort" name="port" type="number" min="1" max="65535" value="443" required></div>
+<div><label for="generatorCount">Number of configs</label><input id="generatorCount" name="count" type="number" min="1" max="100" value="10" required></div>
+</div>
+<label for="subscriptionName">Subscription Name</label><input id="subscriptionName" name="subscriptionName" maxlength="64" value="Sakura-Sub" required>
+<button id="generateButton" type="submit">🌸 Generate</button>
+</form>
+<div id="generatorResult" aria-live="polite"></div>
+<div id="configsList"></div></div>
 
 <div class="card">
 <h2>3. Subscription</h2>
-<form id="subscriptionForm"><input name="userId" placeholder="User ID" required><input name="expiresAt" type="datetime-local"><button>Create Subscription</button></form>
+<form id="subscriptionForm"><input name="userId" placeholder="User ID" required><input name="name" placeholder="Subscription name (optional)" maxlength="64"><input name="expiresAt" type="datetime-local"><button>Create Subscription</button></form>
 <form id="provisionForm"><input name="subscriptionId" placeholder="Subscription ID" required><input name="templateId" placeholder="Template ID" required><input name="deviceId" placeholder="Optional Device ID"><button>Provision Version</button></form>
 <form id="rebuildForm"><input name="subscriptionId" placeholder="Subscription ID" required><button class="secondary">Rebuild Subscription</button></form>
 <div id="subscriptionsList"></div></div>
@@ -66,15 +74,34 @@ async function load(){
 }
 function render(){
  $("templatesList").innerHTML=state.templates.map(t=>'<div class="item"><b>'+esc(t.name)+'</b> <span class="pill">'+esc(t.protocol)+'</span><br><span class="muted">'+esc(t.id)+' • v'+t.version+'</span></div>').join("")||'<p class="muted">No templates yet.</p>';
- $("configsList").innerHTML=state.configs.map(c=>'<div class="item"><b>'+esc(c.id)+'</b> <span class="pill">'+esc(c.status)+'</span><br><span class="muted">template '+esc(c.templateId)+(c.deviceId?" • device "+esc(c.deviceId):"")+'</span></div>').join("")||'<p class="muted">No configs yet.</p>';
- $("subscriptionsList").innerHTML=state.subscriptions.map(s=>'<div class="item"><b>'+esc(s.id)+'</b> <span class="pill">'+esc(s.status)+'</span><br><span class="muted">user '+esc(s.userId)+(s.expiresAt?" • expires "+esc(s.expiresAt):"")+'</span></div>').join("")||'<p class="muted">No subscriptions yet.</p>';
+ $("configsList").innerHTML=state.configs.map(c=>'<div class="item"><b>'+esc(c.payload?.name||c.id)+'</b> <span class="pill">'+esc(c.status)+'</span><br><span class="muted">'+esc(c.payload?.protocol||"Template config")+" • port "+esc(c.payload?.port??"—")+" • "+esc(c.id)+'</span></div>').join("")||'<p class="muted">No configs yet.</p>';
+ $("subscriptionsList").innerHTML=state.subscriptions.map(s=>'<div class="item"><b>'+esc(s.name||s.id)+'</b> <span class="pill">'+esc(s.status)+'</span><br><span class="muted">'+esc(s.id)+" • user "+esc(s.userId)+(s.expiresAt?" • expires "+esc(s.expiresAt):"")+'</span></div>').join("")||'<p class="muted">No subscriptions yet.</p>';
 }
 $("templateForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await api("/internal/templates",{method:"POST",body:json({name:f.get("name"),protocol:f.get("protocol"),definition:JSON.parse(f.get("definition")||"{}")})});await load()}catch(x){$("out").textContent=String(x)}};
-$("configForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await api("/internal/configs",{method:"POST",body:json({userId:f.get("userId"),deviceId:f.get("deviceId")||undefined,templateId:f.get("templateId"),expiresAt:f.get("expiresAt")?new Date(f.get("expiresAt")).toISOString():undefined})});await load()}catch(x){$("out").textContent=String(x)}};
-$("subscriptionForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await api("/internal/subscriptions",{method:"POST",body:json({userId:f.get("userId"),expiresAt:f.get("expiresAt")?new Date(f.get("expiresAt")).toISOString():undefined})});await load()}catch(x){$("out").textContent=String(x)}};
+$("configForm").onsubmit=async e=>{
+e.preventDefault();const f=new FormData(e.target);const button=$("generateButton");button.disabled=true;button.textContent="Generating…";$("generatorResult").textContent="Generating configs…";
+try{
+const result=await api("/internal/config-generator",{method:"POST",body:json({protocol:f.get("protocol"),port:Number(f.get("port")),subscriptionName:String(f.get("subscriptionName")).trim(),count:Number(f.get("count"))})});
+const link=location.origin+"/s/"+result.value.accessToken;
+$("generatorResult").textContent="✓ "+result.value.subscription.name+" — "+result.value.subscription.configCount+" configs generated (version "+result.value.subscription.version+").";
+$("out").textContent="Subscription link (save it now):\n"+link+"\n\nGenerated configs:\n"+JSON.stringify(result.value.configs,null,2);
+await load();
+}catch(x){const message=String(x);$("generatorResult").textContent=message.includes("template_not_found")?"No active template matches this protocol. Create one in Template Registry first.":message.includes("template_not_ready")?"The selected template is missing required server or credential fields. Update it in Template Registry first.":"Generation failed: "+message;}
+finally{button.disabled=false;button.textContent="🌸 Generate"}
+};
+$("subscriptionForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await api("/internal/subscriptions",{method:"POST",body:json({userId:f.get("userId"),name:f.get("name")||undefined,expiresAt:f.get("expiresAt")?new Date(f.get("expiresAt")).toISOString():undefined})});await load()}catch(x){$("out").textContent=String(x)}};
 $("provisionForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await api("/internal/subscriptions/"+encodeURIComponent(f.get("subscriptionId"))+"/provision",{method:"POST",body:json({templateId:f.get("templateId"),deviceId:f.get("deviceId")||undefined})});await load()}catch(x){$("out").textContent=String(x)}};
 $("rebuildForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await api("/internal/subscriptions/"+encodeURIComponent(f.get("subscriptionId"))+"/rebuild",{method:"POST"});await load()}catch(x){$("out").textContent=String(x)}};
 $("refresh").onclick=()=>load().catch(x=>$("out").textContent=String(x));load().catch(()=>{});
 </script></body></html>`;
-  return new Response(html,{headers:{"content-type":"text/html; charset=UTF-8","cache-control":"no-store"}});
+  return new Response(html, { headers: {
+    "content-type": "text/html; charset=UTF-8",
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "permissions-policy": "camera=(), microphone=(), geolocation=()",
+    "cross-origin-resource-policy": "same-origin",
+    "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'"
+  }});
 }
