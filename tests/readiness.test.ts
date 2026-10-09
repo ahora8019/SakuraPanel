@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { runReadiness } from "../src/core/diagnostics";
-import type { Env } from "../src/types/env";
 
 function makeDb(shouldFail = false): D1Database {
   return {
