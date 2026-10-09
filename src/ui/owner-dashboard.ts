@@ -11,7 +11,7 @@ button{background:#d85f9d;border:0;font-weight:700}.secondary{background:#333}.d
 .item{padding:10px 0;border-top:1px solid #333}.pill{display:inline-block;padding:3px 8px;border-radius:99px;background:#292929;margin-left:5px}
 pre{white-space:pre-wrap;word-break:break-word;max-height:320px;overflow:auto}@media(max-width:600px){.grid,.row{grid-template-columns:1fr}}
 </style></head><body>
-<h1>🌸 SakuraPanel Owner</h1>
+<h1>🌸 SakuraPanel Owner</h1>\n<p><a href="/owner/labs" style="color:#f08dbd">Open v1 Systems Labs — Config Studio · Pulse · Speed · Route Advisor</a></p>
 <section id="login" class="card"><form method="post" action="/owner/login">
 <p class="muted">Cloudflare-only control panel. No external VPS is required by SakuraPanel itself.</p>
 <input name="username" value="ahora_8019" autocomplete="username" required>
