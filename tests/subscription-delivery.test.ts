@@ -21,12 +21,20 @@ class MemoryConfigRepository implements ConfigRepository {
 
 class MemorySubscriptionRepository implements SubscriptionRepository {
   private current: Subscription;
+  combinedLookupCalls = 0;
+  legacyTokenLookupCalls = 0;
+  latestVersionLookupCalls = 0;
+
   constructor(subscription: Subscription, private readonly version: SubscriptionVersion) {
     this.current = subscription;
   }
   async findById(id: string) { return id === this.current.id ? this.current : null; }
-  async findByPublicTokenHash(hash: string) { return hash === this.current.publicTokenHash ? this.current : null; }
+  async findByPublicTokenHash(hash: string) {
+    this.legacyTokenLookupCalls++;
+    return hash === this.current.publicTokenHash ? this.current : null;
+  }
   async findByPublicTokenHashWithLatestVersion(hash: string) {
+    this.combinedLookupCalls++;
     return hash === this.current.publicTokenHash
       ? { subscription: this.current, version: this.version }
       : null;
@@ -43,7 +51,10 @@ class MemorySubscriptionRepository implements SubscriptionRepository {
     this.current = { ...this.current, status, updatedAt };
     return true;
   }
-  async getLatestVersion(id: string) { return id === this.version.subscriptionId ? this.version : null; }
+  async getLatestVersion(id: string) {
+    this.latestVersionLookupCalls++;
+    return id === this.version.subscriptionId ? this.version : null;
+  }
   async saveVersion() {}
 }
 
@@ -68,14 +79,18 @@ describe("subscription public delivery", () => {
       { id: "cfg-2", userId: "user-1", templateId: "tpl", templateVersion: 1, payload: { ok: 2 }, status: "REVOKED", createdAt: "2026-01-01T00:00:00.000Z" }
     ];
     const version: SubscriptionVersion = { id: "v1", subscriptionId: "sub-1", version: 1, configIds: ["cfg-1", "cfg-2"], createdAt: "2026-01-01T00:00:00.000Z" };
+    const subscriptionRepository = new MemorySubscriptionRepository(subscription, version);
     const service = new SubscriptionDeliveryService(
-      new MemorySubscriptionRepository(subscription, version),
+      subscriptionRepository,
       new MemoryConfigRepository(configs)
     );
 
     const snapshot = await service.getSnapshot(token, "2026-01-01T00:01:00.000Z");
     expect(snapshot.version).toBe(1);
     expect(snapshot.configs.map(config => config.id)).toEqual(["cfg-1"]);
+    expect(subscriptionRepository.combinedLookupCalls).toBe(1);
+    expect(subscriptionRepository.legacyTokenLookupCalls).toBe(0);
+    expect(subscriptionRepository.latestVersionLookupCalls).toBe(0);
   });
 
   it("does not reveal whether an invalid token belongs to a subscription", async () => {
