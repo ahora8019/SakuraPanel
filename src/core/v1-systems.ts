@@ -255,7 +255,7 @@ export function rankRoutes(candidates: RouteEvidence[], now = new Date().toISOSt
     if (!evidenceValid || !candidate.compatible || candidate.healthy !== true) {
       return { ...candidate, score: null, confidence: "low" as const, reasons };
     }
-    const latencyScore = 100 / (1 + candidate.latencyMs / 250);
+    const latencyScore = 100 / (1 + candidate.latencyMs! / 250);
     const score = Math.round((latencyScore * 0.55 + (1 - candidate.errorRate!) * 100 * 0.30 + 100 * 0.15) * 10) / 10;
     reasons.push("fresh_healthy_measurement", "latency_error_rate_and_availability_scored");
     const confidence = ageMs <= 5 * 60_000 ? "high" as const : "medium" as const;
