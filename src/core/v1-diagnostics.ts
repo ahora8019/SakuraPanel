@@ -20,10 +20,10 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
   users: ["id", "username", "role", "status", "security_version"],
   configs: ["id", "user_id", "template_id", "template_version", "status", "expires_at"],
   config_versions: ["id", "config_id", "version", "payload"],
-  templates: ["id", "name", "protocol", "definition", "status"],
+  templates: ["id", "name", "protocol", "definition_json", "status"],
   auth_sessions: ["id", "user_id", "token_version", "expires_at", "revoked_at"],
-  audit_logs: ["id", "actor_user_id", "action", "created_at"],
-  rate_limit_buckets: ["bucket_key", "window_started_at", "count"]
+  audit_logs: ["id", "actor_id", "action", "resource", "created_at"],
+  rate_limit_buckets: ["key", "reset_at", "count"]
 };
 
 export async function runPulse(env: Env): Promise<PulseReport> {
