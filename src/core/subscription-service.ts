@@ -185,7 +185,7 @@ export class SubscriptionService {
     const current = await this.get(id);
     // Revocation is terminal: reactivating the same record would revive an old
     // bearer token that may have been revoked after compromise.
-    if (current.status === "REVOKED" && status === "ACTIVE") {
+    if (current.status === "REVOKED" && status !== "REVOKED") {
       throw new Error("subscription_revoked_terminal");
     }
     if (status === "ACTIVE" && current.expiresAt) {
@@ -197,7 +197,7 @@ export class SubscriptionService {
     if (!(await this.repository.updateStatus(id, status, now))) {
       const latest = await this.repository.findById(id);
       if (!latest) throw new Error("subscription_not_found");
-      if (latest.status === "REVOKED" && status === "ACTIVE") {
+      if (latest.status === "REVOKED" && status !== "REVOKED") {
         throw new Error("subscription_revoked_terminal");
       }
       throw new Error("subscription_not_found");
