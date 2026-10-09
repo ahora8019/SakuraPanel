@@ -1,11 +1,10 @@
 name: Deploy SakuraPanel
 
 on:
+  # Production changes are released only through an explicit manual dispatch.
+  # This prevents an ordinary merge to main from silently applying D1 migrations
+  # and deploying a Worker to production.
   workflow_dispatch:
-  push:
-    branches: ["main"]
-    paths-ignore:
-      - "**/*.md"
 
 permissions:
   contents: read
