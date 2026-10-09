@@ -26,7 +26,7 @@ export class ConfigReleaseService {
   async publish(configId: string, version: number, actorId: string, now = new Date().toISOString()): Promise<ConfigRelease> {
     await this.assertActor(actorId);
     await this.assertVersion(configId, version);
-    const release = await this.releases.publish(configId, version, actorId, now);
+    const release = await this.releases.publish(configId, version, actorId, now, "PUBLISH");
     await this.writeAudit("PUBLISH", configId, version, actorId, now);
     return release;
   }
@@ -34,7 +34,7 @@ export class ConfigReleaseService {
   async rollback(configId: string, version: number, actorId: string, now = new Date().toISOString()): Promise<ConfigRelease> {
     await this.assertActor(actorId);
     await this.assertVersion(configId, version);
-    const release = await this.releases.publish(configId, version, actorId, now);
+    const release = await this.releases.publish(configId, version, actorId, now, "ROLLBACK");
     await this.writeAudit("ROLLBACK", configId, version, actorId, now);
     return release;
   }
