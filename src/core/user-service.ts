@@ -21,6 +21,9 @@ export class UserService {
     const current = await this.users.findById(id);
     if (!current) throw new Error("not_found");
     if (!isRole(actorRole) || !["ACTIVE", "SUSPENDED", "DISABLED"].includes(status)) throw new Error("validation_failed");
+    // The schema intentionally permits only one OWNER. Deactivating that row
+    // would make bootstrap/login impossible and lock the installation out.
+    if (current.role === "OWNER" && status !== "ACTIVE") throw new Error("owner_status_protected");
     if (actorRole !== "OWNER" && roleRank(actorRole) <= roleRank(current.role)) throw new Error("forbidden");
     await this.users.updateStatus(id, status, now);
     const updated = await this.users.findById(id);
