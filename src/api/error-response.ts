@@ -23,7 +23,8 @@ export function errorResponse(error: unknown, status = 500): Response {
     "version_not_found",
     "release_not_found",
     "service_not_configured",
-    "owner_status_protected"
+    "owner_status_protected",
+    "config_revoked_terminal"
   ]);
   const publicCode = safeCodes.has(code) ? code : "internal_error";
   return Response.json({ ok: false, error: publicCode }, {
