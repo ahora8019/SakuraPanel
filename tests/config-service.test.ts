@@ -24,6 +24,8 @@ describe("config revocation lifecycle", () => {
 
     await expect(service.updateStatus("cfg-1", "ACTIVE", "2026-10-09T00:00:00.000Z"))
       .rejects.toThrow("config_revoked_terminal");
+    await expect(service.updateStatus("cfg-1", "EXPIRED", "2026-10-09T00:00:00.000Z"))
+      .rejects.toThrow("config_revoked_terminal");
     expect(updateStatus).not.toHaveBeenCalled();
   });
 });
