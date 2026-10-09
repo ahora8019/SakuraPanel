@@ -38,7 +38,11 @@ export class SubscriptionDiagnosticsService {
     const nowMs = Date.parse(now);
     if (Number.isNaN(nowMs)) throw new Error("invalid_timestamp");
 
-    const expired = !!subscription.expiresAt && Date.parse(subscription.expiresAt) <= nowMs;
+    const subscriptionExpiry = subscription.expiresAt ? Date.parse(subscription.expiresAt) : null;
+    // Delivery rejects malformed expiry timestamps; diagnostics must report the
+    // same result instead of incorrectly marking them as healthy.
+    const expired = subscriptionExpiry !== null &&
+      (!Number.isFinite(subscriptionExpiry) || subscriptionExpiry <= nowMs);
     const version = await this.subscriptions.getLatestVersion(subscriptionId);
     const issues: string[] = [];
     const base = { status: subscription.status, expired, ...(subscription.expiresAt ? { expiresAt: subscription.expiresAt } : {}) };
@@ -69,7 +73,13 @@ export class SubscriptionDiagnosticsService {
       if (!config) { missing++; continue; }
       if (config.userId !== subscription.userId) { wrongOwner++; continue; }
       if (config.status !== "ACTIVE") { inactive++; continue; }
-      if (config.expiresAt && Date.parse(config.expiresAt) <= nowMs) { configExpired++; continue; }
+      if (config.expiresAt) {
+        const configExpiry = Date.parse(config.expiresAt);
+        if (!Number.isFinite(configExpiry) || configExpiry <= nowMs) {
+          configExpired++;
+          continue;
+        }
+      }
       eligible++;
 
       if (compatibilityTarget) {
