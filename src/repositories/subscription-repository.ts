@@ -78,7 +78,7 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
 
   async updateStatus(id: string, status: Subscription["status"], updatedAt: string): Promise<boolean> {
     const result = await this.db.prepare(
-      "UPDATE subscriptions SET status=?, updated_at=? WHERE id=? AND NOT (status='REVOKED' AND ?='ACTIVE')"
+      "UPDATE subscriptions SET status=?, updated_at=? WHERE id=? AND (status<>'REVOKED' OR ?='REVOKED')"
     ).bind(status, updatedAt, id, status).run();
     return result.meta.changes > 0;
   }
