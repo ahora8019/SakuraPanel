@@ -8,7 +8,8 @@ import type {
 const PLATFORMS: readonly ClientPlatform[] = ["ANDROID", "IOS", "WINDOWS", "MACOS", "LINUX", "OTHER"];
 const PROTOCOLS: readonly ClientProtocol[] = ["VLESS", "VMESS", "TROJAN", "SHADOWSOCKS", "OTHER"];
 const FEATURES: readonly CompatibilityFeature[] = ["TCP", "TLS", "REALITY", "WEBSOCKET", "GRPC", "HTTP2", "QUIC"];
-const ALLOWED_KEYS = new Set(["platform", "protocol", "client", "feature"]);
+const ALLOWED_KEYS = new Set(["platform", "protocol", "client", "feature", "clientVersion"]);
+const VERSION_PATTERN = /^\d+(?:\.\d+){0,3}$/;
 
 /**
  * Parse compatibility query parameters consistently across private and public APIs.
@@ -24,8 +25,10 @@ export function parseCompatibilityTarget(params: URLSearchParams): Compatibility
   const protocolValues = params.getAll("protocol");
   const clients = params.getAll("client").map(client => client.trim());
   const features = params.getAll("feature");
+  const clientVersionValues = params.getAll("clientVersion");
   const platform = platformValues[0];
   const protocol = protocolValues[0];
+  const clientVersion = clientVersionValues[0];
 
   if (
     platformValues.length !== 1 ||
@@ -34,11 +37,13 @@ export function parseCompatibilityTarget(params: URLSearchParams): Compatibility
     !PROTOCOLS.includes(protocol as ClientProtocol) ||
     clients.length === 0 ||
     clients.length > 32 ||
-    new Set(clients).size !== clients.length ||
+    new Set(clients.map(client => client.toLowerCase())).size !== clients.length ||
     clients.some(client => !/^[A-Za-z0-9._ -]{1,64}$/.test(client)) ||
     features.length > FEATURES.length ||
     new Set(features).size !== features.length ||
-    features.some(feature => !FEATURES.includes(feature as CompatibilityFeature))
+    features.some(feature => !FEATURES.includes(feature as CompatibilityFeature)) ||
+    clientVersionValues.length > 1 ||
+    (clientVersion !== undefined && (clientVersion.length > 32 || !VERSION_PATTERN.test(clientVersion)))
   ) {
     throw new Error("validation_failed");
   }
@@ -47,6 +52,7 @@ export function parseCompatibilityTarget(params: URLSearchParams): Compatibility
     platform: platform as ClientPlatform,
     protocol: protocol as ClientProtocol,
     clients,
-    ...(features.length > 0 ? { features: features as CompatibilityFeature[] } : {})
+    ...(features.length > 0 ? { features: features as CompatibilityFeature[] } : {}),
+    ...(clientVersion !== undefined ? { clientVersion } : {})
   };
 }
