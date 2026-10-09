@@ -104,6 +104,21 @@ describe("Sakura Speed Lab and Route Advisor", () => {
     expect(rankRoutes([]).decision).toBe("insufficient_data");
   });
 
+  it("requires at least three samples before recommending a route", () => {
+    const result = rankRoutes([{
+      id: "single-sample",
+      compatible: true,
+      healthy: true,
+      latencyMs: 5,
+      errorRate: 0,
+      sampleCount: 1,
+      measuredAt: "2026-10-09T11:59:00.000Z"
+    }], "2026-10-09T12:00:00.000Z");
+    expect(result.decision).toBe("insufficient_data");
+    expect(result.candidates[0].score).toBeNull();
+    expect(result.candidates[0].reasons).toContain("minimum_three_samples_required");
+  });
+
   it("ranks fresh healthy compatible candidates and rejects stale or unhealthy evidence", () => {
     const now = "2026-10-09T12:00:00.000Z";
     const result = rankRoutes([
