@@ -23,6 +23,43 @@ function hasSensitiveField(value: unknown, depth = 0): boolean {
   });
 }
 
+function isValidConnectionUri(candidate: string): boolean {
+  if (candidate.length > 8192 || /[\\r\\n\\0]/.test(candidate)) return false;
+  const scheme = candidate.match(/^([a-z][a-z0-9+.-]*):\\/\\//i)?.[1]?.toLowerCase();
+  if (!scheme || !URI_SCHEMES.has(scheme + ":")) return false;
+
+  if (scheme === "vmess") {
+    try {
+      const encoded = candidate.slice("vmess://".length).split("#", 1)[0].split("?", 1)[0];
+      const normalized = encoded.replace(/-/g, "+").replace(/_/g, "/");
+      const binary = atob(normalized + "=".repeat((4 - normalized.length % 4) % 4));
+      const decoded = new TextDecoder().decode(Uint8Array.from(binary, char => char.charCodeAt(0)));
+      const payload = JSON.parse(decoded) as Record<string, unknown>;
+      const port = Number(payload.port);
+      return typeof payload.add === "string" && payload.add.length > 0 &&
+        !/[\\r\\n\\0]/.test(payload.add) && Number.isInteger(port) && port >= 1 && port <= 65535 &&
+        typeof payload.id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(payload.id);
+    } catch {
+      return false;
+    }
+  }
+
+  try {
+    const parsed = new URL(candidate);
+    const port = Number(parsed.port);
+    if (!parsed.hostname || !Number.isInteger(port) || port < 1 || port > 65535) return false;
+    if (scheme === "vless") {
+      const id = decodeURIComponent(parsed.username);
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+    }
+    if (scheme === "trojan") return parsed.username.length > 0;
+    if (scheme === "ss") return parsed.username.length > 0 || candidate.includes("@");
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function validConnectionUri(config: GeneratedConfig): string | null {
   const candidates: unknown[] = [
     config.payload.uri,
@@ -31,15 +68,7 @@ function validConnectionUri(config: GeneratedConfig): string | null {
     config.payload.connection_uri
   ];
   for (const candidate of candidates) {
-    if (typeof candidate !== "string" || candidate.length > 8192 || /[\r\n\0]/.test(candidate)) continue;
-    try {
-      const parsed = new URL(candidate);
-      if (URI_SCHEMES.has(parsed.protocol)) return candidate;
-    } catch {
-      // The URL constructor rejects non-hierarchical URI forms used by these protocols.
-      const scheme = candidate.match(/^([a-z][a-z0-9+.-]*):\/\//i)?.[1]?.toLowerCase();
-      if (scheme && URI_SCHEMES.has(scheme + ":") && candidate.length > scheme.length + 3) return candidate;
-    }
+    if (typeof candidate === "string" && isValidConnectionUri(candidate)) return candidate;
   }
   return null;
 }
@@ -53,6 +82,12 @@ export function inspectConfig(config: GeneratedConfig, now = new Date().toISOStr
   }
   if (reasons.length) return { config, state: "invalid", reasons };
   if (!["ACTIVE", "EXPIRED", "REVOKED"].includes(String(config.status))) return { config, state: "invalid", reasons: ["configuration_status_invalid"] };
+  for (const key of ["uri", "connectionUri", "connection_uri"] as const) {
+    const candidate = config.payload[key];
+    if (candidate !== undefined && (typeof candidate !== "string" || !isValidConnectionUri(candidate))) {
+      return { config, state: "invalid", reasons: ["connection_uri_invalid"] };
+    }
+  }
   if (hasSensitiveField(config.payload)) return { config, state: "sensitive", reasons: ["sensitive_fields_excluded"] };
   const nowMs = Date.parse(now);
   if (config.expiresAt) {
