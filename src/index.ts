@@ -94,7 +94,13 @@ export default {
       try {
         await new EmergencyLock(env.SECURITY_KV).assertUnlocked();
       } catch {
-        return Response.json({ ok: false, error: "emergency_lock_active" }, { status: 503 });
+        if (/^\\/s\\/[A-Za-z0-9_-]{1,64}$/.test(url.pathname)) {
+          return publicSubscriptionErrorResponse("emergency_lock_active", 503, { "retry-after": "5" });
+        }
+        return Response.json({ ok: false, error: "emergency_lock_active" }, {
+          status: 503,
+          headers: { "cache-control": "no-store", "retry-after": "5" }
+        });
       }
     }
 
