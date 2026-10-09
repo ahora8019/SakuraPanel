@@ -53,7 +53,8 @@ describe("Config Studio", () => {
   it("uses UTF-8 standard Base64 for subscription line lists and round-trips Unicode", () => {
     const uri = "vless://abc@example.com:443?remarks=東京";
     const result = exportConfigs([config({ payload: { uri } })], "subscription");
-    const binary = atob(result.body);\n    const decoded = new TextDecoder().decode(Uint8Array.from(binary, char => char.charCodeAt(0)));
+    const binary = atob(result.body);
+    const decoded = new TextDecoder().decode(Uint8Array.from(binary, char => char.charCodeAt(0)));
     expect(decoded).toBe(uri);
   });
 
