@@ -71,7 +71,8 @@ export default {
         service: "sakurapanel",
         requestId,
         checks: {
-          database: readiness.database.status
+          database: readiness.database.status,
+          authentication: readiness.authentication.status
         }
       }, {
         status: readiness.ok ? 200 : 503,
