@@ -17,7 +17,7 @@ This document describes the implemented behavior and its current limits. It is n
 - Returns individual passed, failed, unavailable, or skipped checks and measured duration. A failed/skipped check is not reported as healthy.
 - The /ready endpoint exposes only check statuses, never secret values.
 - /internal/pulse and the existing diagnostics endpoint remain reachable during Emergency Lock for authenticated read-only diagnosis. All other protected operations retain the global lock guard.
-- History is currently request-time only; durable history and scheduled Pulse execution are not implemented.
+- The existing hourly Cloudflare Cron handler now runs Pulse and records scheduled results in migration 0019 system_check_runs. Duplicate slots are ignored, stale running rows are recovered, and retention is bounded to 30 days / 1,000 rows. The history API is Owner-only. This history remains unavailable in an environment until migration 0019 is applied.
 
 ## Sakura Speed Lab
 
@@ -41,7 +41,7 @@ This document describes the implemented behavior and its current limits. It is n
 
 ## Shared security and operational limits
 
-- No new database migration is introduced by this implementation.
+- Migration 0019 adds the bounded system_check_runs history table and indexes. It has been added to source but has not been applied to Production.
 - No Production deployment, remote migration, lock reset, backup restore, or user-data mutation was performed by this change.
-- Durable diagnostic history, live route candidates, full multi-sample telemetry ingestion, and a protocol-client-specific Base64 subscription contract remain unimplemented because the current codebase does not provide those data contracts.
+- Live route candidates, full multi-sample telemetry ingestion, and a protocol-client-specific Base64 subscription contract remain unimplemented because the current codebase does not provide those data contracts.
 - Before v1.0, run the release-validation workflow on the final PR revision, configure and verify an isolated Preview environment, run an isolated restore drill, verify the Production /ready result after an explicitly authorized deployment, and review the actual Owner/RBAC/Emergency Lock regression evidence.
