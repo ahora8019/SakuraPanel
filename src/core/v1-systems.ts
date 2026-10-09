@@ -75,7 +75,7 @@ function validConnectionUri(config: GeneratedConfig): string | null {
 
 export function inspectConfig(config: GeneratedConfig, now = new Date().toISOString()): StudioItem {
   const reasons: string[] = [];
-  if (Object.prototype.hasOwnProperty.call(config.payload, "__sakurapanelInvalidPayload")) {
+  if (config.payload && typeof config.payload === "object" && Object.prototype.hasOwnProperty.call(config.payload, "__sakurapanelInvalidPayload")) {
     return { config, state: "invalid", reasons: ["stored_payload_malformed"] };
   }
   const validation = validateGeneratedConfig(config);
