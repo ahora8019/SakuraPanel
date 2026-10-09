@@ -45,4 +45,13 @@ describe("compatibility target query parser", () => {
       "platform=UNKNOWN&protocol=VLESS&client=v2rayNG"
     ))).toThrow("validation_failed");
   });
+  it("trims client names before matching and duplicate detection", () => {
+    expect(parseCompatibilityTarget(new URLSearchParams(
+      "platform=ANDROID&protocol=VLESS&client=%20v2rayNG%20"
+    )).clients).toEqual(["v2rayNG"]);
+    expect(() => parseCompatibilityTarget(new URLSearchParams(
+      "platform=ANDROID&protocol=VLESS&client=v2rayNG&client=%20v2rayNG%20"
+    ))).toThrow("validation_failed");
+  });
+
 });
