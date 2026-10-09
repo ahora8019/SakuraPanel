@@ -86,4 +86,12 @@ describe("subscription diagnostics",()=>{
   expect(d.issues).toContain("config_limit_exceeded");
  });
 
+ it("reports an error when no active config can be delivered",async()=>{
+  const ver:SubscriptionVersion={id:"v1",subscriptionId:"s1",version:1,configIds:["c1"],createdAt:"2026-01-01T00:00:00.000Z"};
+  const d=await new SubscriptionDiagnosticsService(new S(sub,ver),new C([cfg("c1","REVOKED")])).inspect("s1","2026-01-01T00:01:00.000Z");
+  expect(d.configs.eligible).toBe(0);
+  expect(d.issues).toContain("no_eligible_configs");
+  expect(d.status).toBe("error");
+ });
+
 });
