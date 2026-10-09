@@ -104,6 +104,62 @@ describe("v1 systems API authorization", () => {
     expect(response.status).toBe(400);
   });
 
+
+  it("ranks only fresh persisted route health evidence and never mutates routing", async () => {
+    const measuredAt = new Date().toISOString();
+    let query = "";
+    let bound: unknown[] = [];
+    const db = {
+      prepare(sql: string) {
+        query = sql;
+        return {
+          bind(...values: unknown[]) { bound = values; return this; },
+          async all() {
+            return { results: [{
+              id: "route-fast",
+              compatible: 1,
+              healthy: 1,
+              latency_ms: 35,
+              error_rate: 0.01,
+              sample_count: 4,
+              measured_at: measuredAt
+            }] };
+          }
+        };
+      }
+    } as unknown as D1Database;
+    const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
+    const response = await api.routeAdvisor(context("OWNER", "owner-1"), { DB: db } as Env);
+    const body = await response.json() as { value: { decision: string; source: string; candidates: Array<{ id: string; score: number | null }> } };
+    expect(response.status).toBe(200);
+    expect(body.value.decision).toBe("recommendation");
+    expect(body.value.source).toBe("d1_route_health_samples");
+    expect(body.value.candidates[0].id).toBe("route-fast");
+    expect(body.value.candidates[0].score).not.toBeNull();
+    expect(query).toContain("route_health_samples");
+    expect(query).toContain("LIMIT 50");
+    expect(bound).toHaveLength(2);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("fails closed when the Route Advisor schema is not available", async () => {
+    const db = {
+      prepare() {
+        return {
+          bind() { return this; },
+          async all() { throw new Error("no such table: route_candidates"); }
+        };
+      }
+    } as unknown as D1Database;
+    const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
+    const response = await api.routeAdvisor(context("OWNER", "owner-1"), { DB: db } as Env);
+    const body = await response.json() as { error: string; value: { decision: string; candidates: unknown[] } };
+    expect(response.status).toBe(503);
+    expect(body.error).toBe("route_candidate_model_unavailable");
+    expect(body.value.decision).toBe("insufficient_data");
+    expect(body.value.candidates).toEqual([]);
+  });
+
   it("returns insufficient data rather than inventing routes", async () => {
     const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
     const response = await api.routeAdvisor(context("OWNER", "owner-1"), {} as Env);
