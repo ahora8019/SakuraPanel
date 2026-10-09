@@ -17,7 +17,7 @@ try {
   const db = Array.isArray(config.d1_databases) && config.d1_databases.some(binding => binding.binding === "DB" && binding.database_id);
   const kv = Array.isArray(config.kv_namespaces) && config.kv_namespaces.some(binding => binding.binding === "SECURITY_KV" && binding.id);
   check("cloudflare_bindings", db && kv, "DB and SECURITY_KV bindings must be present in the deployment config");
-  check("migration_directory", config.migrations_dir === undefined || config.d1_databases.some(binding => binding.migrations_dir === "migrations"), "D1 migrations directory is configured");
+  check("migration_directory", config.d1_databases.some(binding => binding.binding === "DB" && binding.migrations_dir === "migrations"), "D1 migrations directory is configured");
 } catch {
   check("cloudflare_config", false, "wrangler.jsonc is missing or invalid JSON/JSONC without comments");
 }
@@ -35,7 +35,7 @@ try {
   const files = readdirSync("migrations").filter(file => /^\d{4}_.+\.sql$/.test(file)).sort();
   const nums = files.map(file => Number(file.slice(0, 4)));
   const unique = new Set(nums).size === nums.length;
-  const ordered = nums.every((num, index) => index === 0 || num > nums[index - 1]);
+  const ordered = nums.every((num, index) => num === index + 1);
   check("migration_order", files.length > 0 && unique && ordered, `${files.length} migration files found; filenames are unique and ordered`);
 } catch {
   check("migration_order", false, "migration directory is unavailable");
