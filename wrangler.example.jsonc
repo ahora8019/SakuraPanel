@@ -7,18 +7,18 @@
     {
       "binding": "DB",
       "database_name": "sakurapanel",
-      "database_id": "<D1_DATABASE_ID>"
+      "database_id": "<D1_DATABASE_ID>",
+      "migrations_dir": "migrations"
     }
   ],
 
   "kv_namespaces": [
     {
-      "binding": "RATE_LIMIT_KV",
-      "id": "<RATE_LIMIT_KV_ID>"
-    },
-    {
       "binding": "SECURITY_KV",
       "id": "<SECURITY_KV_ID>"
     }
   ]
+
+  // Configure AUTH_SECRET and BOOTSTRAP_SECRET using Wrangler secrets.
+  // SECURITY_KV is required by the runtime; rate limiting is stored in D1.
 }
