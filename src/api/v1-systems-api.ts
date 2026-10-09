@@ -176,6 +176,41 @@ export class V1SystemsApi {
         const sample = { timestamp: new Date().toISOString(), operation: "diagnostic_serialization", ok: true };
         return JSON.stringify(sample).length;
       }, 250);
+      let timingHistory: {
+        status: "available" | "unavailable";
+        sampleCount: number;
+        limit: number;
+        operations: Array<{ operation: string; count: number; averageDurationMs: number; maxDurationMs: number; latestAt: string }>;
+      } = { status: "unavailable", sampleCount: 0, limit: 100, operations: [] };
+      try {
+        const history = await env.DB.prepare(
+          "SELECT operation, measured_at, duration_ms FROM operation_timing_samples ORDER BY measured_at DESC LIMIT 100"
+        ).all<{ operation: string; measured_at: string; duration_ms: number }>();
+        const grouped = new Map<string, { durations: number[]; latestAt: string }>();
+        for (const row of history.results ?? []) {
+          const duration = Number(row.duration_ms);
+          if (!Number.isFinite(duration) || duration < 0) continue;
+          const item = grouped.get(row.operation) ?? { durations: [], latestAt: row.measured_at };
+          item.durations.push(duration);
+          if (row.measured_at > item.latestAt) item.latestAt = row.measured_at;
+          grouped.set(row.operation, item);
+        }
+        timingHistory = {
+          status: "available",
+          sampleCount: Array.from(grouped.values()).reduce((total, item) => total + item.durations.length, 0),
+          limit: 100,
+          operations: Array.from(grouped.entries()).map(([operation, item]) => ({
+            operation,
+            count: item.durations.length,
+            averageDurationMs: Math.round(item.durations.reduce((sum, duration) => sum + duration, 0) / item.durations.length * 100) / 100,
+            maxDurationMs: Math.round(Math.max(...item.durations) * 100) / 100,
+            latestAt: item.latestAt
+          }))
+        };
+      } catch {
+        // Keep the diagnostic endpoint useful while an older Preview schema is being migrated.
+      }
+
       const value = {
         measuredAt: new Date().toISOString(),
         methodology: "single bounded diagnostic sample; not a benchmark",
@@ -184,6 +219,7 @@ export class V1SystemsApi {
           { operation: "database_select_1", scope: "server_database_operation", ok: database.ok, durationMs: database.durationMs, ...(database.error ? { error: database.error } : {}) },
           { operation: "json_serialization", scope: "server_local_operation", ok: serialization.ok, durationMs: serialization.durationMs, ...(serialization.ok ? { outputBytes: serialization.value } : { error: serialization.error }) }
         ],
+        timingHistory,
         platformMetrics: { status: "unavailable", detail: "Cloudflare platform analytics are not exposed through the configured Worker bindings." },
         warning: "This is one diagnostic sample, not a statistically reliable performance benchmark."
       };
