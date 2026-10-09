@@ -126,6 +126,7 @@ export class SubscriptionService {
 
     const latest = await this.repository.getLatestVersion(subscriptionId);
     if (!latest || latest.configIds.length === 0) throw new Error("no_eligible_configs");
+    if (latest.configIds.length > 100) throw new Error("validation_failed");
 
     const available: string[] = [];
     for (const configId of latest.configIds) {
