@@ -35,6 +35,17 @@ import { AuditApi } from "./api/audit-api";
 
 import type { Env } from "./types/env";
 
+
+function decodePathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    // Invalid percent-encoding should behave like an unknown resource, not
+    // escape the Worker handler as an unhandled URIError.
+    return "";
+  }
+}
+
 export default {
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     if (!env.DB) return;
@@ -460,7 +471,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     if (templateStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return templateApi.updateStatus(context, decodeURIComponent(templateStatusMatch[1]), body);
+      return templateApi.updateStatus(context, decodePathSegment(templateStatusMatch[1]), body);
     }
 
     if (url.pathname === "/internal/configs" && request.method === "GET") {
@@ -474,15 +485,15 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
 
     const configCompatibilityMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/compatibility$/);
     if (configCompatibilityMatch && request.method === "GET") {
-      return configCompatibilityApi.get(context, decodeURIComponent(configCompatibilityMatch[1]), url.searchParams);
+      return configCompatibilityApi.get(context, decodePathSegment(configCompatibilityMatch[1]), url.searchParams);
     }
 
     const configMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)$/);
-    if (configMatch && request.method === "GET") return configApi.get(context, decodeURIComponent(configMatch[1]));
+    if (configMatch && request.method === "GET") return configApi.get(context, decodePathSegment(configMatch[1]));
 
     const configReleaseListMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/releases$/);
     if (configReleaseListMatch && request.method === "GET") {
-      return configReleaseApi.list(context, decodeURIComponent(configReleaseListMatch[1]));
+      return configReleaseApi.list(context, decodePathSegment(configReleaseListMatch[1]));
     }
 
     const configReleasePublishMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/releases\/publish$/);
@@ -490,7 +501,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       const version = body && typeof body === "object" ? Number((body as Record<string, unknown>).version) : NaN;
-      return configReleaseApi.publish(context, decodeURIComponent(configReleasePublishMatch[1]), version);
+      return configReleaseApi.publish(context, decodePathSegment(configReleasePublishMatch[1]), version);
     }
 
     const configReleaseRollbackMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/releases\/rollback$/);
@@ -498,14 +509,14 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       const version = body && typeof body === "object" ? Number((body as Record<string, unknown>).version) : NaN;
-      return configReleaseApi.rollback(context, decodeURIComponent(configReleaseRollbackMatch[1]), version);
+      return configReleaseApi.rollback(context, decodePathSegment(configReleaseRollbackMatch[1]), version);
     }
 
     const configStatusMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/status$/);
     if (configStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return configApi.updateStatus(context, decodeURIComponent(configStatusMatch[1]), body);
+      return configApi.updateStatus(context, decodePathSegment(configStatusMatch[1]), body);
     }
 
     if (url.pathname === "/internal/subscriptions" && request.method === "GET") {
@@ -519,32 +530,32 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
 
     const subscriptionDiagnosticsMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/diagnostics$/);
     if (subscriptionDiagnosticsMatch && request.method === "GET") {
-      return subscriptionDiagnosticsApi.get(context, decodeURIComponent(subscriptionDiagnosticsMatch[1]), url.searchParams);
+      return subscriptionDiagnosticsApi.get(context, decodePathSegment(subscriptionDiagnosticsMatch[1]), url.searchParams);
     }
 
     const subscriptionTokenRotateMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/token\/rotate$/);
     if (subscriptionTokenRotateMatch && request.method === "POST") {
-      return subscriptionApi.rotateToken(context, decodeURIComponent(subscriptionTokenRotateMatch[1]));
+      return subscriptionApi.rotateToken(context, decodePathSegment(subscriptionTokenRotateMatch[1]));
     }
 
     const subscriptionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)$/);
-    if (subscriptionMatch && request.method === "GET") return subscriptionApi.get(context, decodeURIComponent(subscriptionMatch[1]));
+    if (subscriptionMatch && request.method === "GET") return subscriptionApi.get(context, decodePathSegment(subscriptionMatch[1]));
 
     const subscriptionProvisionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/provision$/);
     if (subscriptionProvisionMatch && request.method === "POST") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return subscriptionApi.provision(context, decodeURIComponent(subscriptionProvisionMatch[1]), body);
+      return subscriptionApi.provision(context, decodePathSegment(subscriptionProvisionMatch[1]), body);
     }
 
     const subscriptionRebuildMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/rebuild$/);
-    if (subscriptionRebuildMatch && request.method === "POST") return subscriptionApi.rebuild(context, decodeURIComponent(subscriptionRebuildMatch[1]));
+    if (subscriptionRebuildMatch && request.method === "POST") return subscriptionApi.rebuild(context, decodePathSegment(subscriptionRebuildMatch[1]));
 
     const subscriptionStatusMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/status$/);
     if (subscriptionStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return subscriptionApi.updateStatus(context, decodeURIComponent(subscriptionStatusMatch[1]), body);
+      return subscriptionApi.updateStatus(context, decodePathSegment(subscriptionStatusMatch[1]), body);
     }
 
     if (url.pathname === "/internal/users" && request.method === "GET") return userApi.list(context);
@@ -558,11 +569,11 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     if (userStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return userApi.updateStatus(context, decodeURIComponent(userStatusMatch[1]), body);
+      return userApi.updateStatus(context, decodePathSegment(userStatusMatch[1]), body);
     }
 
     const userDevicesMatch = url.pathname.match(/^\/internal\/users\/([^/]+)\/devices$/);
-    if (userDevicesMatch && request.method === "GET") return deviceApi.list(context, decodeURIComponent(userDevicesMatch[1]));
+    if (userDevicesMatch && request.method === "GET") return deviceApi.list(context, decodePathSegment(userDevicesMatch[1]));
 
     if (url.pathname === "/internal/devices" && request.method === "POST") {
       let body: unknown;
@@ -574,7 +585,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     if (deviceStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return deviceApi.updateStatus(context, decodeURIComponent(deviceStatusMatch[1]), body);
+      return deviceApi.updateStatus(context, decodePathSegment(deviceStatusMatch[1]), body);
     }
 
     return Response.json({ ok: false, error: "not_found" }, { status: 404 });
