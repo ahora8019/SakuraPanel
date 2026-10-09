@@ -26,7 +26,15 @@ export class UserService {
     if (current.role === "OWNER" && current.status === "ACTIVE" && status !== "ACTIVE") {
       if (await this.users.countActiveOwners() <= 1) throw new Error("last_active_owner");
     }
-    await this.users.updateStatus(id, status, now);
+    const changed = await this.users.updateStatus(id, status, now);
+    if (!changed) {
+      const latest = await this.users.findById(id);
+      if (!latest) throw new Error("not_found");
+      if (latest.role === "OWNER" && latest.status === "ACTIVE" && status !== "ACTIVE") {
+        throw new Error("last_active_owner");
+      }
+      throw new Error("conflict");
+    }
     const updated = await this.users.findById(id);
     if (!updated) throw new Error("not_found");
     return toUser(updated);
