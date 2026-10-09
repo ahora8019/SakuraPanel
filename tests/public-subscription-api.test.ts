@@ -95,6 +95,6 @@ describe("public subscription API reliability", () => {
 
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({ ok: false, error: "internal_error" });
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
   });
 });
