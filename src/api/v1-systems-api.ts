@@ -111,6 +111,58 @@ export class V1SystemsApi {
     }
   }
 
+  async pulseHistory(context: SecurityContext | null, env: Env, params: URLSearchParams): Promise<Response> {
+    try {
+      requirePermission(context, "security:manage");
+      if (!env.DB) return Response.json({ ok: false, error: "database_not_configured" }, { status: 503 });
+      const rawLimit = params.get("limit");
+      const limit = rawLimit === null ? 24 : Number(rawLimit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("validation_failed");
+
+      const last = await env.DB.prepare(
+        "SELECT completed_at FROM system_check_runs WHERE status='passed' ORDER BY completed_at DESC LIMIT 1"
+      ).first<{ completed_at: string | null }>();
+      const rows = await env.DB.prepare(
+        "SELECT id, scheduled_slot, status, started_at, completed_at, duration_ms, result_json FROM system_check_runs ORDER BY started_at DESC LIMIT ?"
+      ).bind(limit).all<Record<string, unknown>>();
+      const items = (rows.results ?? []).map(row => {
+        let result: unknown = null;
+        try {
+          const parsed = JSON.parse(String(row.result_json ?? "{}")) as Record<string, unknown>;
+          result = {
+            status: parsed.status,
+            measuredAt: parsed.measuredAt,
+            durationMs: parsed.durationMs,
+            checks: Array.isArray(parsed.checks) ? parsed.checks : []
+          };
+        } catch {
+          result = { status: "unavailable", reason: "stored_result_malformed" };
+        }
+        return {
+          id: String(row.id),
+          scheduledSlot: String(row.scheduled_slot),
+          status: String(row.status),
+          startedAt: String(row.started_at),
+          ...(row.completed_at == null ? {} : { completedAt: String(row.completed_at) }),
+          durationMs: Number(row.duration_ms ?? 0),
+          result
+        };
+      });
+      return Response.json({
+        ok: true,
+        value: {
+          status: "available",
+          lastSuccessfulAt: last?.completed_at ?? null,
+          count: items.length,
+          items
+        }
+      }, { headers: { "cache-control": "no-store" } });
+    } catch (error) {
+      if (error instanceof Error && error.message === "validation_failed") return errorResponse(error, 400);
+      return Response.json({ ok: false, error: "pulse_history_unavailable" }, { status: 503, headers: { "cache-control": "no-store" } });
+    }
+  }
+
   async speed(context: SecurityContext | null, env: Env): Promise<Response> {
     try {
       requirePermission(context, "security:manage");
