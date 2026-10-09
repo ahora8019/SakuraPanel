@@ -5,7 +5,9 @@ export type AuditAction =
   | "LOGIN"
   | "REVOKE"
   | "ADMIN_ACTION"
-  | "SECURITY_EVENT";
+  | "SECURITY_EVENT"
+  | "PUBLISH"
+  | "ROLLBACK";
 
 export interface AuditEvent {
   id: string;
