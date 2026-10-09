@@ -28,7 +28,18 @@ export class SubscriptionDeliveryService {
     if (!/^[A-Za-z0-9_-]{43}$/.test(token)) throw new Error("not_found");
 
     const tokenHash = await hashSubscriptionToken(token);
-    const subscription = await this.subscriptions.findByPublicTokenHash(tokenHash);
+    let subscription: Awaited<ReturnType<SubscriptionRepository["findByPublicTokenHash"]>>;
+    let version: Awaited<ReturnType<SubscriptionRepository["getLatestVersion"]>>;
+
+    if (this.subscriptions.findByPublicTokenHashWithLatestVersion) {
+      const delivery = await this.subscriptions.findByPublicTokenHashWithLatestVersion(tokenHash);
+      subscription = delivery?.subscription ?? null;
+      version = delivery?.version ?? null;
+    } else {
+      subscription = await this.subscriptions.findByPublicTokenHash(tokenHash);
+      version = subscription ? await this.subscriptions.getLatestVersion(subscription.id) : null;
+    }
+
     if (!subscription || subscription.status !== "ACTIVE") throw new Error("not_found");
 
     const nowMs = Date.parse(now);
@@ -38,7 +49,6 @@ export class SubscriptionDeliveryService {
       if (Number.isNaN(expiresMs) || expiresMs <= nowMs) throw new Error("subscription_expired");
     }
 
-    const version = await this.subscriptions.getLatestVersion(subscription.id);
     if (!version || version.configIds.length === 0) throw new Error("no_eligible_configs");
     if (version.configIds.length > MAX_CONFIGS_PER_SUBSCRIPTION) throw new Error("validation_failed");
 

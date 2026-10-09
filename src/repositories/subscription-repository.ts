@@ -3,6 +3,13 @@ import type { Subscription, SubscriptionVersion } from "../models/subscription";
 export interface SubscriptionRepository {
   findById(id: string): Promise<Subscription | null>;
   findByPublicTokenHash(tokenHash: string): Promise<Subscription | null>;
+  /**
+   * Fetches a subscription and its latest version in one D1 round trip.
+   * Optional so non-D1/test repositories can keep the simpler interface.
+   */
+  findByPublicTokenHashWithLatestVersion?(
+    tokenHash: string
+  ): Promise<{ subscription: Subscription; version: SubscriptionVersion | null } | null>;
   listByUserId(userId: string): Promise<Subscription[]>;
   create(subscription: Subscription): Promise<void>;
   updateStatus(id: string, status: Subscription["status"], updatedAt: string): Promise<boolean>;
@@ -58,6 +65,45 @@ export class D1SubscriptionRepository implements SubscriptionRepository {
       "SELECT id, user_id, name, status, expires_at, public_token_hash, created_at, updated_at FROM subscriptions WHERE public_token_hash = ? LIMIT 1"
     ).bind(tokenHash).first<Record<string, unknown>>();
     return row ? mapSubscription(row) : null;
+  }
+
+  async findByPublicTokenHashWithLatestVersion(
+    tokenHash: string
+  ): Promise<{ subscription: Subscription; version: SubscriptionVersion | null } | null> {
+    const row = await this.db.prepare(
+      `SELECT
+         s.id, s.user_id, s.name, s.status, s.expires_at, s.public_token_hash, s.created_at, s.updated_at,
+         sv.id AS latest_version_id,
+         sv.subscription_id AS latest_version_subscription_id,
+         sv.version AS latest_version_number,
+         sv.config_ids_json AS latest_config_ids_json,
+         sv.created_at AS latest_version_created_at
+       FROM subscriptions s
+       LEFT JOIN subscription_versions sv
+         ON sv.subscription_id = s.id
+        AND sv.version = (
+          SELECT MAX(v.version)
+          FROM subscription_versions v
+          WHERE v.subscription_id = s.id
+        )
+       WHERE s.public_token_hash = ?
+       LIMIT 1`
+    ).bind(tokenHash).first<Record<string, unknown>>();
+
+    if (!row) return null;
+
+    const subscription = mapSubscription(row);
+    const version = row.latest_version_id == null
+      ? null
+      : mapVersion({
+          id: row.latest_version_id,
+          subscription_id: row.latest_version_subscription_id,
+          version: row.latest_version_number,
+          config_ids_json: row.latest_config_ids_json,
+          created_at: row.latest_version_created_at
+        });
+
+    return { subscription, version };
   }
 
   async listByUserId(userId: string): Promise<Subscription[]> {
