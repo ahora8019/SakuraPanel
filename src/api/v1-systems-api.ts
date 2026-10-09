@@ -1,21 +1,51 @@
 import type { ConfigRepository } from "../repositories/config-repository";
-import { exportConfigs, rankRoutes, timeBounded, type StudioFormat } from "../core/v1-systems";
+import type { SubscriptionRepository } from "../repositories/subscription-repository";
+import { exportConfigs, exportSubscriptionSnapshot, rankRoutes, timeBounded, type StudioFormat } from "../core/v1-systems";
 import { runPulse } from "../core/v1-diagnostics";
 import { requirePermission, type SecurityContext } from "../security/security-middleware";
 import type { Env } from "../types/env";
 
 export class V1SystemsApi {
-  constructor(private readonly configs: ConfigRepository) {}
+  constructor(private readonly configs: ConfigRepository, private readonly subscriptions: SubscriptionRepository) {}
 
-  async configStudio(context: SecurityContext | null, env: Env, params: URLSearchParams): Promise<Response> {
+  async configStudio(context: SecurityContext | null, _env: Env, params: URLSearchParams): Promise<Response> {
     try {
       const ctx = requirePermission(context, "config:read");
       const requestedUser = params.get("userId")?.trim();
       const userId = ctx.principal.role === "MEMBER" ? ctx.principal.userId : (requestedUser || ctx.principal.userId);
       if (!userId || userId.length > 128) throw new Error("validation_failed");
       const format = (params.get("format") || "json") as StudioFormat;
-      const configs = await this.configs.listByUserId(userId);
-      const result = exportConfigs(configs, format);
+      let result;
+
+      if (format === "subscription") {
+        const subscriptionId = params.get("subscriptionId")?.trim();
+        if (!subscriptionId || subscriptionId.length > 128) throw new Error("validation_failed");
+        const subscription = await this.subscriptions.findById(subscriptionId);
+        if (!subscription || subscription.userId !== userId ||
+            (ctx.principal.role === "MEMBER" && subscription.userId !== ctx.principal.userId)) {
+          throw new Error("subscription_not_found");
+        }
+        const now = new Date().toISOString();
+        if (subscription.status !== "ACTIVE") throw new Error("subscription_not_found");
+        if (subscription.expiresAt) {
+          const expiresAt = Date.parse(subscription.expiresAt);
+          if (!Number.isFinite(expiresAt) || expiresAt <= Date.parse(now)) throw new Error("subscription_not_found");
+        }
+        const version = await this.subscriptions.getLatestVersion(subscription.id);
+        if (!version || version.configIds.length === 0) throw new Error("no_eligible_configs");
+        if (version.configIds.length > 100) throw new Error("export_limit_exceeded");
+        const rows = await this.configs.listByIds(version.configIds);
+        const byId = new Map(rows.map(config => [config.id, config]));
+        const ordered = version.configIds.map(id => byId.get(id)).filter((config): config is NonNullable<typeof config> => Boolean(config));
+        if (ordered.some(config => config.userId !== subscription.userId)) throw new Error("subscription_not_found");
+        result = exportSubscriptionSnapshot(ordered, version.version, subscription.expiresAt, now);
+        if (result.count === 0) throw new Error("no_eligible_configs");
+      } else {
+        if (format !== "json" && format !== "links") throw new Error("unsupported_export_format");
+        const configs = await this.configs.listByUserId(userId);
+        result = exportConfigs(configs, format);
+      }
+
       return Response.json({
         ok: true,
         value: {
@@ -26,7 +56,7 @@ export class V1SystemsApi {
           body: result.body,
           excluded: result.excluded
         }
-      }, { headers: { "cache-control": "no-store", "content-disposition": `attachment; filename="${result.filename}"` } });
+      }, { headers: { "cache-control": "no-store" } });
     } catch (error) {
       return errorResponse(error, statusFor(error));
     }
@@ -100,13 +130,14 @@ export class V1SystemsApi {
 function statusFor(error: unknown): number {
   const code = error instanceof Error ? error.message : "";
   if (code === "forbidden") return 403;
-  if (code === "validation_failed" || code === "unsupported_export_format" || code === "export_limit_exceeded" || code === "invalid_timestamp") return 400;
+  if (code === "validation_failed" || code === "unsupported_export_format" || code === "export_limit_exceeded" || code === "invalid_timestamp" || code === "invalid_subscription_version") return 400;
+  if (code === "subscription_not_found" || code === "no_eligible_configs") return 404;
   return 500;
 }
 
 function errorResponse(error: unknown, status: number): Response {
   const code = error instanceof Error ? error.message : "";
-  const safeCode = ["forbidden", "validation_failed", "unsupported_export_format", "export_limit_exceeded", "invalid_timestamp"].includes(code)
+  const safeCode = ["forbidden", "validation_failed", "unsupported_export_format", "export_limit_exceeded", "invalid_timestamp", "invalid_subscription_version", "subscription_not_found", "no_eligible_configs"].includes(code)
     ? code : "internal_error";
   return Response.json({ ok: false, error: safeCode }, { status, headers: { "cache-control": "no-store" } });
 }
