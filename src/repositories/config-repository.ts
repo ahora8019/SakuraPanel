@@ -13,13 +13,15 @@ export interface ConfigRepository {
 
 function mapConfig(row: Record<string, unknown>): GeneratedConfig {
   let payload: Record<string, unknown> = {};
-  let invalidPayload = false;
-  try {
-    const parsed = JSON.parse(String(row.payload ?? "{}"));
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) payload = parsed;
-    else invalidPayload = true;
-  } catch {
-    invalidPayload = true;
+  let invalidPayload = row.payload == null;
+  if (!invalidPayload) {
+    try {
+      const parsed = JSON.parse(String(row.payload));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) payload = parsed;
+      else invalidPayload = true;
+    } catch {
+      invalidPayload = true;
+    }
   }
   if (invalidPayload) {
     // Non-enumerable marker lets diagnostics/export reject corrupt stored JSON without leaking it.
