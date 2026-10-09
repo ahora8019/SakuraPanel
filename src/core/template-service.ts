@@ -51,7 +51,15 @@ export class TemplateService {
       throw new Error("conflict");
     }
 
-    await this.templates.save(template);
+    try {
+      await this.templates.save(template);
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+      if (message.includes("unique constraint") || message.includes("constraint failed") || message.includes("unique")) {
+        throw new Error("conflict");
+      }
+      throw error;
+    }
     return template;
   }
 
