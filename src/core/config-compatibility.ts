@@ -144,7 +144,7 @@ export function evaluateCompatibilityMatrix(
     if (value.protocol !== target.protocol) reasons.push("protocol_mismatch");
 
     const declaredClients = value.clients as string[];
-    if (!declaredClients.some(name => name.toLowerCase() === client.toLowerCase())) {
+    if (!declaredClients.some(name => name.trim().toLowerCase() === client.trim().toLowerCase())) {
       reasons.push("client_not_declared");
     }
 
