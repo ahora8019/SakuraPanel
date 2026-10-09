@@ -25,8 +25,9 @@ function makeKv(value: string | null = null, shouldFail = false): KVNamespace {
 describe("production readiness security controls", () => {
   it("fails readiness when the emergency-lock binding is missing", async () => {
     const result = await runReadiness({
+      AUTH_SECRET: "x".repeat(32),
       DB: makeDb()
-    } as Env);
+    });
 
     expect(result.ok).toBe(false);
     expect(result.database.status).toBe("ok");
@@ -38,9 +39,10 @@ describe("production readiness security controls", () => {
 
   it("fails readiness while the emergency lock is active", async () => {
     const result = await runReadiness({
+      AUTH_SECRET: "x".repeat(32),
       DB: makeDb(),
       SECURITY_KV: makeKv("1")
-    } as Env);
+    });
 
     expect(result.ok).toBe(false);
     expect(result.securityControl).toEqual({
@@ -51,9 +53,10 @@ describe("production readiness security controls", () => {
 
   it("fails readiness when the security state store cannot be read", async () => {
     const result = await runReadiness({
+      AUTH_SECRET: "x".repeat(32),
       DB: makeDb(),
       SECURITY_KV: makeKv(null, true)
-    } as Env);
+    });
 
     expect(result.ok).toBe(false);
     expect(result.securityControl).toEqual({
@@ -64,9 +67,10 @@ describe("production readiness security controls", () => {
 
   it("passes readiness only when the database is reachable and the lock is clear", async () => {
     const result = await runReadiness({
+      AUTH_SECRET: "x".repeat(32),
       DB: makeDb(),
       SECURITY_KV: makeKv(null)
-    } as Env);
+    });
 
     expect(result.ok).toBe(true);
     expect(result.database.status).toBe("ok");
@@ -75,9 +79,10 @@ describe("production readiness security controls", () => {
 
   it("fails readiness when the database is unavailable even if security controls are healthy", async () => {
     const result = await runReadiness({
+      AUTH_SECRET: "x".repeat(32),
       DB: makeDb(true),
       SECURITY_KV: makeKv(null)
-    } as Env);
+    });
 
     expect(result.ok).toBe(false);
     expect(result.database.status).toBe("error");
