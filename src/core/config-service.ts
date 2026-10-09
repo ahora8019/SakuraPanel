@@ -107,7 +107,11 @@ export class ConfigService {
       if (!validation.valid) throw new Error("validation_failed");
       generated.push(config);
     }
-    await this.configs.saveMany(generated);
+    if (this.configs.saveMany) {
+      await this.configs.saveMany(generated);
+    } else {
+      for (const config of generated) await this.configs.save(config);
+    }
     return generated;
   }
 

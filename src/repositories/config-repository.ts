@@ -5,7 +5,7 @@ export interface ConfigRepository {
   listByUserId(userId: string): Promise<GeneratedConfig[]>;
   listByIds(ids: string[]): Promise<GeneratedConfig[]>;
   save(config: GeneratedConfig): Promise<void>;
-  saveMany(configs: GeneratedConfig[]): Promise<void>;
+  saveMany?(configs: GeneratedConfig[]): Promise<void>;
   updateStatus(id: string, status: ConfigStatus, updatedAt: string): Promise<boolean>;
   getLatestVersion(configId: string): Promise<number>;
   saveVersion(configId: string, version: number, payload: Record<string, unknown>, createdAt: string): Promise<void>;
