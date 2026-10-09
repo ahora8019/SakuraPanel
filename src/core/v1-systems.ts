@@ -80,6 +80,13 @@ export function inspectConfig(config: GeneratedConfig, now = new Date().toISOStr
   }
   const validation = validateGeneratedConfig(config);
   if (!validation.valid) reasons.push(...validation.errors);
+  if (typeof config.id !== "string" || config.id.length > 128 ||
+      typeof config.userId !== "string" || config.userId.length > 128 ||
+      typeof config.templateId !== "string" || config.templateId.length > 128) {
+    reasons.push("configuration_identifier_invalid");
+  }
+  if (!Number.isInteger(config.templateVersion) || config.templateVersion < 1) reasons.push("invalid_template_version");
+  if (!Number.isFinite(Date.parse(config.createdAt))) reasons.push("invalid_created_at");
   if (!config.payload || typeof config.payload !== "object" || Array.isArray(config.payload)) {
     reasons.push("payload_invalid");
   }
