@@ -332,7 +332,14 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
         throw error;
       }
 
-      return Response.json({ ok: true, value: { user, session: { expiresAt: expiresIso }, token } }, { status: 201 });
+      return Response.json({ ok: true, value: { user, session: { expiresAt: expiresIso }, token } }, {
+        status: 201,
+        headers: {
+          "cache-control": "no-store, private",
+          "pragma": "no-cache",
+          "x-content-type-options": "nosniff"
+        }
+      });
     }
 
     if (url.pathname === "/internal/bootstrap/session" && request.method === "POST") {
@@ -382,7 +389,14 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       return Response.json({
         ok: true,
         value: { user: { id: owner.id, username: owner.username, role: owner.role }, session: { expiresAt: expiresIso }, token }
-      }, { status: 201 });
+      }, {
+        status: 201,
+        headers: {
+          "cache-control": "no-store, private",
+          "pragma": "no-cache",
+          "x-content-type-options": "nosniff"
+        }
+      });
     }
 
     let context: Awaited<ReturnType<typeof authenticateRequest>> = null;
