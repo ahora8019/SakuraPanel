@@ -180,6 +180,8 @@ export class SubscriptionService {
     now = new Date().toISOString()
   ): Promise<Subscription> {
     if (!["ACTIVE", "EXPIRED", "REVOKED"].includes(status)) throw new Error("validation_failed");
+    const nowMs = Date.parse(now);
+    if (!Number.isFinite(nowMs)) throw new Error("invalid_timestamp");
     const current = await this.get(id);
     // Revocation is terminal: reactivating the same record would revive an old
     // bearer token that may have been revoked after compromise.
@@ -188,7 +190,7 @@ export class SubscriptionService {
     }
     if (status === "ACTIVE" && current.expiresAt) {
       const expiresMs = Date.parse(current.expiresAt);
-      if (!Number.isFinite(expiresMs) || expiresMs <= Date.parse(now)) {
+      if (!Number.isFinite(expiresMs) || expiresMs <= nowMs) {
         throw new Error("subscription_expired");
       }
     }
