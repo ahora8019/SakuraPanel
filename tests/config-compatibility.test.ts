@@ -94,4 +94,37 @@ describe("config compatibility", () => {
     expect(result.entries[0]?.status).toBe("unknown");
     expect(result.entries[0]?.reasons).toContain("client_unknown");
   });
+  it("does not claim requested features that the config does not declare", () => {
+    const result = evaluateCompatibilityMatrix(config, {
+      platform: "ANDROID",
+      protocol: "VLESS",
+      clients: ["v2rayNG"],
+      features: ["QUIC"]
+    });
+    expect(result.entries[0]?.status).toBe("partial");
+    expect(result.entries[0]?.reasons).toContain("config_feature_missing");
+    expect(result.entries[0]?.unsupportedFeatures).toContain("QUIC");
+  });
+
+  it("marks requested feature support unknown when config metadata omits features", () => {
+    const configWithoutFeatures: GeneratedConfig = {
+      ...config,
+      payload: {
+        compatibility: {
+          platform: "ANDROID",
+          protocol: "VLESS",
+          clients: ["v2rayNG"]
+        }
+      }
+    };
+    const result = evaluateCompatibilityMatrix(configWithoutFeatures, {
+      platform: "ANDROID",
+      protocol: "VLESS",
+      clients: ["v2rayNG"],
+      features: ["REALITY"]
+    });
+    expect(result.entries[0]?.status).toBe("unknown");
+    expect(result.entries[0]?.reasons).toContain("config_features_unknown");
+  });
+
 });
