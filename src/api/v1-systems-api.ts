@@ -197,17 +197,90 @@ export class V1SystemsApi {
   async routeAdvisor(context: SecurityContext | null, env: Env): Promise<Response> {
     try {
       requirePermission(context, "security:manage");
-      // Migration 0016 intentionally removed the legacy endpoints/endpoint_health model.
-      // No current supported route-candidate repository exists, so inventing candidates
-      // or reusing unrelated config records would produce unsafe recommendations.
-      const result = rankRoutes([], new Date().toISOString());
+      if (!env.DB) {
+        const result = rankRoutes([], new Date().toISOString());
+        return Response.json({
+          ok: true,
+          value: {
+            ...result,
+            candidates: [],
+            source: "route_candidate_model_unavailable",
+            detail: "D1 is not configured; no route recommendation was produced."
+          }
+        }, { headers: { "cache-control": "no-store" } });
+      }
+
+      const now = new Date();
+      const nowIso = now.toISOString();
+      const cutoffIso = new Date(now.getTime() - 15 * 60_000).toISOString();
+      let rows: Array<{
+        id: string;
+        compatible: number;
+        healthy: number | null;
+        latency_ms: number | null;
+        error_rate: number | null;
+        sample_count: number;
+        measured_at: string | null;
+      }>;
+      try {
+        const result = await env.DB.prepare(
+          `SELECT c.id,
+                  c.compatible,
+                  CASE WHEN COUNT(s.id) = 0 THEN NULL ELSE MIN(s.healthy) END AS healthy,
+                  AVG(s.latency_ms) AS latency_ms,
+                  AVG(s.error_rate) AS error_rate,
+                  COUNT(s.id) AS sample_count,
+                  MAX(s.measured_at) AS measured_at
+             FROM route_candidates c
+             LEFT JOIN route_health_samples s
+               ON s.route_id = c.id
+              AND s.measured_at >= ?
+              AND s.measured_at <= ?
+            WHERE c.enabled = 1
+            GROUP BY c.id, c.compatible
+            ORDER BY c.id
+            LIMIT 50`
+        ).bind(cutoffIso, nowIso).all<{
+          id: string;
+          compatible: number;
+          healthy: number | null;
+          latency_ms: number | null;
+          error_rate: number | null;
+          sample_count: number;
+          measured_at: string | null;
+        }>();
+        rows = result.results ?? [];
+      } catch {
+        return Response.json({
+          ok: false,
+          error: "route_candidate_model_unavailable",
+          value: {
+            decision: "insufficient_data",
+            candidates: [],
+            source: "route_candidate_model_unavailable",
+            detail: "Apply the route candidate and health sample migrations before enabling Route Advisor."
+          }
+        }, { status: 503, headers: { "cache-control": "no-store" } });
+      }
+
+      const evidence = rows.map(row => ({
+        id: row.id,
+        compatible: row.compatible === 1,
+        healthy: row.healthy === null ? null : row.healthy === 1,
+        latencyMs: row.latency_ms === null ? null : Number(row.latency_ms),
+        errorRate: row.error_rate === null ? null : Number(row.error_rate),
+        sampleCount: Number(row.sample_count),
+        measuredAt: row.measured_at
+      }));
+      const result = rankRoutes(evidence, nowIso);
       return Response.json({
         ok: true,
         value: {
           ...result,
-          candidates: [],
-          source: "no_route_candidate_model",
-          detail: "The current schema intentionally has no endpoint or endpoint-health table. Configure a supported route model before recommendations can be computed."
+          source: "d1_route_health_samples",
+          evidenceWindowMinutes: 15,
+          candidateLimit: 50,
+          detail: "Advisory only. At least three fresh samples per candidate are required; no route, config, or subscription is changed."
         }
       }, { headers: { "cache-control": "no-store" } });
     } catch (error) {
