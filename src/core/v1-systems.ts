@@ -105,7 +105,7 @@ export function inspectConfig(config: GeneratedConfig, now = new Date().toISOStr
 
 function exportPayload(payload: Record<string, unknown>): Record<string, unknown> {
   // ConfigEngine owns these wrapper fields; they are not part of a protocol payload.
-  const { identity: _identity, metadata: _metadata, ...protocolPayload } = payload;
+  const { identity: _identity, metadata: _metadata, userId: _userId, deviceId: _deviceId, internalMetadata: _internalMetadata, ...protocolPayload } = payload;
   return protocolPayload;
 }
 
