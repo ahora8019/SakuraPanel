@@ -1,7 +1,7 @@
 import type { ConfigRepository } from "../repositories/config-repository";
 import type { GeneratedConfig } from "../models/config";
 import type { SubscriptionRepository } from "../repositories/subscription-repository";
-import { exportConfigs, exportSubscriptionSnapshot, rankRoutes, timeBounded, type StudioExport, type StudioFormat } from "../core/v1-systems";
+import { exportConfigs, exportSubscriptionSnapshot, inspectConfig, rankRoutes, timeBounded, type StudioExport, type StudioFormat } from "../core/v1-systems";
 import { runPulse } from "../core/v1-diagnostics";
 import { requirePermission, type SecurityContext } from "../security/security-middleware";
 import type { Env } from "../types/env";
@@ -15,7 +15,29 @@ export class V1SystemsApi {
       const requestedUser = params.get("userId")?.trim();
       const userId = ctx.principal.role === "MEMBER" ? ctx.principal.userId : (requestedUser || ctx.principal.userId);
       if (!userId || userId.length > 128) throw new Error("validation_failed");
-      const format = (params.get("format") || "json") as StudioFormat;
+      const rawFormat = params.get("format") || "json";
+      if (rawFormat === "inspect") {
+        const configs = await this.configs.listByUserId(userId);
+        const limited = configs.slice(0, 100);
+        const items = limited.map(config => {
+          const inspection = inspectConfig(config);
+          return {
+            id: config.id,
+            templateId: config.templateId,
+            templateVersion: config.templateVersion,
+            status: config.status,
+            ...(config.expiresAt ? { expiresAt: config.expiresAt } : {}),
+            createdAt: config.createdAt,
+            state: inspection.state,
+            reasons: inspection.reasons
+          };
+        });
+        return Response.json({ ok: true, value: { items, total: configs.length, limit: 100, truncated: configs.length > 100 } }, {
+          headers: { "cache-control": "no-store" }
+        });
+      }
+
+      const format = rawFormat as StudioFormat;
       let result: StudioExport;
 
       if (format === "subscription") {
@@ -43,7 +65,20 @@ export class V1SystemsApi {
         if (result.count === 0) throw new Error("no_eligible_configs");
       } else {
         if (format !== "json" && format !== "links") throw new Error("unsupported_export_format");
-        const configs = await this.configs.listByUserId(userId);
+        const requestedIds = params.get("ids");
+        let configs: GeneratedConfig[];
+        if (requestedIds !== null) {
+          const ids = requestedIds.split(",").map(id => id.trim());
+          if (ids.length === 0 || ids.length > 100 || ids.some(id => !id || id.length > 128) || new Set(ids).size !== ids.length) {
+            throw new Error("validation_failed");
+          }
+          const rows = await this.configs.listByIds(ids);
+          if (rows.length !== ids.length || rows.some(config => config.userId !== userId)) throw new Error("not_found");
+          const byId = new Map(rows.map(config => [config.id, config]));
+          configs = ids.map(id => byId.get(id)).filter((config): config is GeneratedConfig => Boolean(config));
+        } else {
+          configs = await this.configs.listByUserId(userId);
+        }
         result = exportConfigs(configs, format);
       }
 
@@ -73,6 +108,59 @@ export class V1SystemsApi {
       });
     } catch (error) {
       return errorResponse(error, statusFor(error));
+    }
+  }
+
+  async pulseHistory(context: SecurityContext | null, env: Env, params: URLSearchParams): Promise<Response> {
+    try {
+      requirePermission(context, "security:manage");
+      if (!env.DB) return Response.json({ ok: false, error: "database_not_configured" }, { status: 503 });
+      const rawLimit = params.get("limit");
+      const limit = rawLimit === null ? 24 : Number(rawLimit);
+      if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("validation_failed");
+
+      const last = await env.DB.prepare(
+        "SELECT completed_at FROM system_check_runs WHERE status='passed' ORDER BY completed_at DESC LIMIT 1"
+      ).first<{ completed_at: string | null }>();
+      const rows = await env.DB.prepare(
+        "SELECT id, scheduled_slot, status, started_at, completed_at, duration_ms, result_json FROM system_check_runs ORDER BY started_at DESC LIMIT ?"
+      ).bind(limit).all<Record<string, unknown>>();
+      const items = (rows.results ?? []).map(row => {
+        let result: unknown = null;
+        try {
+          const parsed = JSON.parse(String(row.result_json ?? "{}")) as Record<string, unknown>;
+          result = {
+            status: parsed.status,
+            measuredAt: parsed.measuredAt,
+            durationMs: parsed.durationMs,
+            checks: Array.isArray(parsed.checks) ? parsed.checks : []
+          };
+        } catch {
+          result = { status: "unavailable", reason: "stored_result_malformed" };
+        }
+        return {
+          id: String(row.id),
+          scheduledSlot: String(row.scheduled_slot),
+          status: String(row.status),
+          startedAt: String(row.started_at),
+          ...(row.completed_at == null ? {} : { completedAt: String(row.completed_at) }),
+          durationMs: Number(row.duration_ms ?? 0),
+          result
+        };
+      });
+      return Response.json({
+        ok: true,
+        value: {
+          status: "available",
+          executionState: items.length ? items[0].status : "never_executed",
+          lastSuccessfulAt: last?.completed_at ?? null,
+          count: items.length,
+          items
+        }
+      }, { headers: { "cache-control": "no-store" } });
+    } catch (error) {
+      if (error instanceof Error && error.message === "validation_failed") return errorResponse(error, 400);
+      return Response.json({ ok: false, error: "pulse_history_unavailable" }, { status: 503, headers: { "cache-control": "no-store" } });
     }
   }
 
@@ -132,13 +220,13 @@ function statusFor(error: unknown): number {
   const code = error instanceof Error ? error.message : "";
   if (code === "forbidden") return 403;
   if (code === "validation_failed" || code === "unsupported_export_format" || code === "export_limit_exceeded" || code === "invalid_timestamp" || code === "invalid_subscription_version") return 400;
-  if (code === "subscription_not_found" || code === "no_eligible_configs") return 404;
+  if (code === "subscription_not_found" || code === "no_eligible_configs" || code === "not_found") return 404;
   return 500;
 }
 
 function errorResponse(error: unknown, status: number): Response {
   const code = error instanceof Error ? error.message : "";
-  const safeCode = ["forbidden", "validation_failed", "unsupported_export_format", "export_limit_exceeded", "invalid_timestamp", "invalid_subscription_version", "subscription_not_found", "no_eligible_configs"].includes(code)
+  const safeCode = ["forbidden", "validation_failed", "unsupported_export_format", "export_limit_exceeded", "invalid_timestamp", "invalid_subscription_version", "subscription_not_found", "no_eligible_configs", "not_found"].includes(code)
     ? code : "internal_error";
   return Response.json({ ok: false, error: safeCode }, { status, headers: { "cache-control": "no-store" } });
 }

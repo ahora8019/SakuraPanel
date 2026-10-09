@@ -17,13 +17,15 @@ function config(overrides: Partial<GeneratedConfig> = {}): GeneratedConfig {
 
 describe("Config Studio", () => {
   it("serializes valid JSON deterministically and excludes internal user identity", () => {
-    const result = exportConfigs([config({ payload: { uri: "vless://11111111-1111-4111-8111-111111111111@example.com:443", label: "東京", identity: { userId: "private-user" }, metadata: { templateId: "internal-template" } } })], "json", "2026-10-02T00:00:00.000Z");
+    const result = exportConfigs([config({ payload: { uri: "vless://11111111-1111-4111-8111-111111111111@example.com:443", label: "東京", userId: "private-user", deviceId: "private-device", identity: { userId: "private-user" }, metadata: { templateId: "internal-template" } } })], "json", "2026-10-02T00:00:00.000Z");
     expect(result.count).toBe(1);
     expect(result.contentType).toContain("application/json");
     const decoded = JSON.parse(result.body);
     expect(decoded[0].payload.label).toBe("東京");
     expect(decoded[0].userId).toBeUndefined();
     expect(decoded[0].payload.identity).toBeUndefined();
+    expect(decoded[0].payload.userId).toBeUndefined();
+    expect(decoded[0].payload.deviceId).toBeUndefined();
     expect(decoded[0].payload.metadata).toBeUndefined();
     expect(result.body).not.toContain("private-user");
   });
@@ -100,6 +102,21 @@ describe("Sakura Speed Lab and Route Advisor", () => {
 
   it("returns insufficient data when no routes have evidence", () => {
     expect(rankRoutes([]).decision).toBe("insufficient_data");
+  });
+
+  it("requires at least three samples before recommending a route", () => {
+    const result = rankRoutes([{
+      id: "single-sample",
+      compatible: true,
+      healthy: true,
+      latencyMs: 5,
+      errorRate: 0,
+      sampleCount: 1,
+      measuredAt: "2026-10-09T11:59:00.000Z"
+    }], "2026-10-09T12:00:00.000Z");
+    expect(result.decision).toBe("insufficient_data");
+    expect(result.candidates[0].score).toBeNull();
+    expect(result.candidates[0].reasons).toContain("minimum_three_samples_required");
   });
 
   it("ranks fresh healthy compatible candidates and rejects stale or unhealthy evidence", () => {

@@ -33,12 +33,14 @@ import { SubscriptionDiagnosticsApi } from "./api/subscription-diagnostics-api";
 import { AuditApi } from "./api/audit-api";
 import { V1SystemsApi } from "./api/v1-systems-api";
 import { ownerLabsResponse } from "./ui/owner-labs";
+import { runScheduledPulse } from "./core/scheduled-pulse";
 
 import type { Env } from "./types/env";
 
 export default {
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     if (!env.DB) return;
+    await runScheduledPulse(env, _controller.scheduledTime);
     await cleanupRateLimitBuckets(env.DB);
   },
 
@@ -91,7 +93,7 @@ export default {
       }
     }
 
-    const readOnlyDiagnosticPath = request.method === "GET" && (url.pathname === "/internal/pulse" || url.pathname === "/internal/diagnostics");
+    const readOnlyDiagnosticPath = request.method === "GET" && (url.pathname === "/internal/pulse" || url.pathname === "/internal/pulse/history" || url.pathname === "/internal/diagnostics");
 
     if (!env.SECURITY_KV && !readOnlyDiagnosticPath) {
       return Response.json({ ok: false, error: "security_control_not_configured" }, {
@@ -400,6 +402,9 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     }
     if (url.pathname === "/internal/pulse" && request.method === "GET") {
       return v1SystemsApi.pulse(context, env);
+    }
+    if (url.pathname === "/internal/pulse/history" && request.method === "GET") {
+      return v1SystemsApi.pulseHistory(context, env, url.searchParams);
     }
     if (url.pathname === "/internal/speed" && request.method === "POST") {
       return v1SystemsApi.speed(context, env);

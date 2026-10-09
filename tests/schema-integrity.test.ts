@@ -13,7 +13,7 @@ describe("D1 migration contract", () => {
     expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
     expect(new Set(numbers).size).toBe(numbers.length);
     expect(numbers[0]).toBe(1);
-    expect(numbers.at(-1)).toBe(18);
+    expect(numbers.at(-1)).toBe(19);
   });
 
   it("contains the core tables required by the application", () => {
@@ -25,7 +25,7 @@ describe("D1 migration contract", () => {
 
     for (const table of [
       "users", "devices", "templates", "configs", "config_versions",
-      "subscriptions", "subscription_versions", "audit_logs", "auth_sessions"
+      "subscriptions", "subscription_versions", "audit_logs", "auth_sessions", "system_check_runs"
     ]) {
       expect(sql).toMatch(new RegExp(`CREATE TABLE(?: IF NOT EXISTS)? ${table}\\b`));
     }

@@ -34,6 +34,31 @@ describe("v1 systems API authorization", () => {
     expect(body.value.count).toBe(1);
   });
 
+  it("lists filterable config metadata without returning payloads", async () => {
+    const configs = {
+      listByUserId: async () => [ownConfig]
+    } as unknown as ConfigRepository;
+    const api = new V1SystemsApi(configs, {} as SubscriptionRepository);
+    const response = await api.configStudio(context("MEMBER", "member-1"), {} as Env, new URLSearchParams("format=inspect"));
+    const body = await response.json() as { value: { items: Array<Record<string, unknown>> } };
+    expect(response.status).toBe(200);
+    expect(body.value.items[0].state).toBe("active");
+    expect(body.value.items[0].payload).toBeUndefined();
+  });
+
+  it("exports only selected config IDs and validates their ownership", async () => {
+    let requested: string[] = [];
+    const configs = {
+      listByIds: async (ids: string[]) => { requested = ids; return [ownConfig]; }
+    } as unknown as ConfigRepository;
+    const api = new V1SystemsApi(configs, {} as SubscriptionRepository);
+    const response = await api.configStudio(context("MEMBER", "member-1"), {} as Env, new URLSearchParams("format=json&ids=config-1"));
+    const body = await response.json() as { value: { count: number } };
+    expect(response.status).toBe(200);
+    expect(requested).toEqual(["config-1"]);
+    expect(body.value.count).toBe(1);
+  });
+
   it("rejects unauthenticated Pulse requests server-side", async () => {
     const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
     const response = await api.pulse(null, {} as Env);
@@ -52,6 +77,31 @@ describe("v1 systems API authorization", () => {
     const response = await api.configStudio(context("MEMBER", "member-1"), {} as Env, new URLSearchParams("format=subscription&subscriptionId=sub-other&userId=other-user"));
     expect(response.status).toBe(404);
     expect(configRead).toBe(false);
+  });
+
+  it("reports never_executed when scheduled Pulse history is empty", async () => {
+    const db = {
+      prepare() {
+        return {
+          bind() { return this; },
+          async first() { return null; },
+          async all() { return { results: [] }; }
+        };
+      }
+    } as unknown as D1Database;
+    const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
+    const response = await api.pulseHistory(context("OWNER", "owner-1"), { DB: db } as Env, new URLSearchParams("limit=10"));
+    const body = await response.json() as { value: { executionState: string; count: number; lastSuccessfulAt: string | null } };
+    expect(response.status).toBe(200);
+    expect(body.value.executionState).toBe("never_executed");
+    expect(body.value.count).toBe(0);
+    expect(body.value.lastSuccessfulAt).toBeNull();
+  });
+
+  it("rejects unbounded Pulse history limits", async () => {
+    const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
+    const response = await api.pulseHistory(context("OWNER", "owner-1"), { DB: {} as D1Database } as Env, new URLSearchParams("limit=1000"));
+    expect(response.status).toBe(400);
   });
 
   it("returns insufficient data rather than inventing routes", async () => {

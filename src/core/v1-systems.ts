@@ -75,8 +75,18 @@ function validConnectionUri(config: GeneratedConfig): string | null {
 
 export function inspectConfig(config: GeneratedConfig, now = new Date().toISOString()): StudioItem {
   const reasons: string[] = [];
+  if (config.payload && typeof config.payload === "object" && Object.prototype.hasOwnProperty.call(config.payload, "__sakurapanelInvalidPayload")) {
+    return { config, state: "invalid", reasons: ["stored_payload_malformed"] };
+  }
   const validation = validateGeneratedConfig(config);
   if (!validation.valid) reasons.push(...validation.errors);
+  if (typeof config.id !== "string" || config.id.length > 128 ||
+      typeof config.userId !== "string" || config.userId.length > 128 ||
+      typeof config.templateId !== "string" || config.templateId.length > 128) {
+    reasons.push("configuration_identifier_invalid");
+  }
+  if (!Number.isInteger(config.templateVersion) || config.templateVersion < 1) reasons.push("invalid_template_version");
+  if (!Number.isFinite(Date.parse(config.createdAt))) reasons.push("invalid_created_at");
   if (!config.payload || typeof config.payload !== "object" || Array.isArray(config.payload)) {
     reasons.push("payload_invalid");
   }
@@ -102,7 +112,7 @@ export function inspectConfig(config: GeneratedConfig, now = new Date().toISOStr
 
 function exportPayload(payload: Record<string, unknown>): Record<string, unknown> {
   // ConfigEngine owns these wrapper fields; they are not part of a protocol payload.
-  const { identity: _identity, metadata: _metadata, ...protocolPayload } = payload;
+  const { identity: _identity, metadata: _metadata, userId: _userId, deviceId: _deviceId, internalMetadata: _internalMetadata, ...protocolPayload } = payload;
   return protocolPayload;
 }
 

@@ -27,21 +27,49 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
   subscription_versions: ["id", "subscription_id", "version", "config_ids_json"],
   auth_sessions: ["id", "user_id", "token_version", "expires_at", "revoked_at"],
   audit_logs: ["id", "actor_id", "action", "resource", "created_at"],
-  rate_limit_buckets: ["key", "reset_at", "count"]
+  rate_limit_buckets: ["key", "reset_at", "count"],
+  system_check_runs: ["id", "scheduled_slot", "status", "started_at", "completed_at", "duration_ms", "result_json"]
 };
 
 const REQUIRED_INDEXES = [
-  "idx_devices_user_id", "idx_devices_user_status_created_at",
+  "idx_users_single_owner", "idx_devices_user_id", "idx_devices_user_status_created_at",
   "idx_configs_user_id", "idx_configs_template_id", "idx_configs_user_created_at",
   "idx_configs_device_created_at", "idx_config_versions_config_id", "idx_config_versions_config_version",
   "idx_config_releases_config_created_at", "idx_config_releases_status",
-  "idx_subscriptions_user_id", "idx_subscriptions_user_created_at",
+  "idx_subscriptions_user_id", "idx_subscriptions_user_created_at", "idx_subscriptions_public_token_hash",
   "idx_subscription_versions_subscription_id", "idx_subscription_versions_created_at",
   "idx_subscription_versions_subscription_version",
   "idx_audit_logs_actor_id", "idx_audit_logs_created_at", "idx_audit_logs_resource",
   "idx_audit_logs_actor_created_at", "idx_audit_logs_resource_created_at",
-  "idx_auth_sessions_user_id", "idx_auth_sessions_expires_at", "idx_rate_limit_buckets_reset_at"
+  "idx_auth_sessions_user_id", "idx_auth_sessions_expires_at", "idx_rate_limit_buckets_reset_at",
+  "idx_system_check_runs_started_at", "idx_system_check_runs_status_started_at"
 ] as const;
+
+const REQUIRED_UNIQUE_KEYS: Record<string, string[][]> = {
+  users: [["username"]],
+  templates: [["name"]],
+  config_versions: [["config_id", "version"]],
+  config_releases: [["config_id", "version"]],
+  subscription_versions: [["subscription_id", "version"]],
+  subscriptions: [["public_token_hash"]],
+  system_check_runs: [["scheduled_slot"]]
+};
+
+const FORBIDDEN_LEGACY_TABLES = ["endpoints", "endpoint_health"] as const;
+
+const REQUIRED_FOREIGN_KEYS: Record<string, Array<{ from: string; table: string; to: string }>> = {
+  devices: [{ from: "user_id", table: "users", to: "id" }],
+  configs: [
+    { from: "user_id", table: "users", to: "id" },
+    { from: "device_id", table: "devices", to: "id" },
+    { from: "template_id", table: "templates", to: "id" }
+  ],
+  config_versions: [{ from: "config_id", table: "configs", to: "id" }],
+  config_releases: [{ from: "config_id", table: "configs", to: "id" }],
+  subscriptions: [{ from: "user_id", table: "users", to: "id" }],
+  subscription_versions: [{ from: "subscription_id", table: "subscriptions", to: "id" }],
+  auth_sessions: [{ from: "user_id", table: "users", to: "id" }]
+};
 
 export async function runPulse(env: Env): Promise<PulseReport> {
   const started = performance.now();
@@ -89,6 +117,7 @@ export async function runPulse(env: Env): Promise<PulseReport> {
         const tables = await env.DB!.prepare("SELECT name FROM sqlite_master WHERE type='table'").all<{ name: string }>();
         const names = new Set((tables.results ?? []).map(row => row.name));
         const missingTables = Object.keys(REQUIRED_COLUMNS).filter(name => !names.has(name));
+        const unexpectedLegacyTables = FORBIDDEN_LEGACY_TABLES.filter(name => names.has(name));
         const missingColumns: string[] = [];
         for (const [table, columns] of Object.entries(REQUIRED_COLUMNS)) {
           if (!names.has(table)) continue;
@@ -99,9 +128,32 @@ export async function runPulse(env: Env): Promise<PulseReport> {
         const indexes = await env.DB!.prepare("SELECT name FROM sqlite_master WHERE type='index'").all<{ name: string }>();
         const indexNames = new Set((indexes.results ?? []).map(row => row.name));
         const missingIndexes = REQUIRED_INDEXES.filter(name => !indexNames.has(name));
-        return { missingTables, missingColumns, missingIndexes };
+        const missingUniqueConstraints: string[] = [];
+        for (const [table, requiredKeys] of Object.entries(REQUIRED_UNIQUE_KEYS)) {
+          if (!names.has(table)) continue;
+          const tableIndexes = await env.DB!.prepare("PRAGMA index_list(" + table + ")").all<{ name: string; unique: number }>();
+          const uniqueIndexes = (tableIndexes.results ?? []).filter(index => Number(index.unique) === 1 && /^[A-Za-z0-9_]+$/.test(index.name));
+          const signatures = new Set<string>();
+          for (const index of uniqueIndexes) {
+            const info = await env.DB!.prepare("PRAGMA index_info(" + index.name + ")").all<{ seqno: number; name: string | null }>();
+            const columns = (info.results ?? []).slice().sort((a, b) => a.seqno - b.seqno).map(row => row.name).filter((name): name is string => typeof name === "string");
+            signatures.add(columns.join(","));
+          }
+          for (const key of requiredKeys) if (!signatures.has(key.join(","))) missingUniqueConstraints.push(table + "." + key.join("+"));
+        }
+        const missingForeignKeys: string[] = [];
+        for (const [table, requiredKeys] of Object.entries(REQUIRED_FOREIGN_KEYS)) {
+          if (!names.has(table)) continue;
+          const rows = await env.DB!.prepare("PRAGMA foreign_key_list(" + table + ")").all<{ from: string; table: string; to: string }>();
+          const actual = new Set((rows.results ?? []).map(row => row.from + "->" + row.table + "." + row.to));
+          for (const key of requiredKeys) {
+            const signature = key.from + "->" + key.table + "." + key.to;
+            if (!actual.has(signature)) missingForeignKeys.push(table + "." + signature);
+          }
+        }
+        return { missingTables, missingColumns, missingIndexes, missingUniqueConstraints, missingForeignKeys, unexpectedLegacyTables };
       });
-      const schemaOkay = schemaResult.ok && schemaResult.value!.missingTables.length === 0 && schemaResult.value!.missingColumns.length === 0 && schemaResult.value!.missingIndexes.length === 0;
+      const schemaOkay = schemaResult.ok && schemaResult.value!.missingTables.length === 0 && schemaResult.value!.missingColumns.length === 0 && schemaResult.value!.missingIndexes.length === 0 && schemaResult.value!.missingUniqueConstraints.length === 0 && schemaResult.value!.missingForeignKeys.length === 0 && schemaResult.value!.unexpectedLegacyTables.length === 0;
       checks.push({
         name: "database_schema",
         status: !schemaResult.ok ? (schemaResult.error === "timeout" ? "unavailable" : "failed") : schemaOkay ? "passed" : "failed",
@@ -110,7 +162,10 @@ export async function runPulse(env: Env): Promise<PulseReport> {
           !schemaOkay ? { detail: [
             ...(schemaResult.value!.missingTables.length ? ["missing_tables:" + schemaResult.value!.missingTables.join(",")] : []),
             ...(schemaResult.value!.missingColumns.length ? ["missing_columns:" + schemaResult.value!.missingColumns.join(",")] : []),
-            ...(schemaResult.value!.missingIndexes.length ? ["missing_indexes:" + schemaResult.value!.missingIndexes.join(",")] : [])
+            ...(schemaResult.value!.missingIndexes.length ? ["missing_indexes:" + schemaResult.value!.missingIndexes.join(",")] : []),
+            ...(schemaResult.value!.missingUniqueConstraints.length ? ["missing_unique_constraints:" + schemaResult.value!.missingUniqueConstraints.join(",")] : []),
+            ...(schemaResult.value!.missingForeignKeys.length ? ["missing_foreign_keys:" + schemaResult.value!.missingForeignKeys.join(",")] : []),
+            ...(schemaResult.value!.unexpectedLegacyTables.length ? ["unexpected_legacy_tables:" + schemaResult.value!.unexpectedLegacyTables.join(",")] : [])
           ].join(";") } : {})
       });
 
