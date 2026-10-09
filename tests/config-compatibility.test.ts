@@ -127,4 +127,18 @@ describe("config compatibility", () => {
     expect(result.entries[0]?.reasons).toContain("config_features_unknown");
   });
 
+  it("honors requested features in the basic compatibility evaluator", () => {
+    expect(evaluateCompatibility(config, {
+      platform: "ANDROID", protocol: "VLESS", clients: ["v2rayNG"], features: ["WEBSOCKET"]
+    })).toEqual({ compatible: false, reasons: ["feature_mismatch"] });
+
+    const noFeatureMetadata: GeneratedConfig = {
+      ...config,
+      payload: { compatibility: { platform: "ANDROID", protocol: "VLESS", clients: ["v2rayNG"] } }
+    };
+    expect(evaluateCompatibility(noFeatureMetadata, {
+      platform: "ANDROID", protocol: "VLESS", clients: ["v2rayNG"], features: ["TCP"]
+    })).toEqual({ compatible: false, reasons: ["compatibility_features_unknown"] });
+  });
+
 });
