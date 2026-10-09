@@ -6,6 +6,10 @@
 </p>
 
 <p align="center">
+  <a href="README_fa.md">🇮🇷 فارسی</a> · <a href="README.md">🇬🇧 English</a>
+</p>
+
+<p align="center">
   <a href="https://github.com/ahora8019/SakuraPanel/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ahora8019/SakuraPanel/actions/workflows/ci.yml/badge.svg?branch=main" /></a>
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-blue" />
   <img alt="Cloudflare Workers" src="https://img.shields.io/badge/Runtime-Cloudflare%20Workers-orange" />
@@ -187,3 +191,9 @@ The GitHub deployment workflow is intentionally manual. **Do not deploy simply t
 - CI: automated validation is configured; check the Actions tab for the latest result.
 - Production: not confirmed as deployed by this documentation change.
 - Merge and deployment: not performed by this repository-organization update.
+
+---
+
+<p align="center">
+  <strong>Made in Iran 🇮🇷</strong>
+</p>
