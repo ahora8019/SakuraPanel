@@ -25,7 +25,7 @@ describe("Sakura Speed Lab server timing", () => {
 
     const response = await api.generate(owner, { userId: "owner-1", templateId: "template-1" });
     expect(response.status).toBe(201);
-    expect(response.headers.get("server-timing")).toMatch(/^config_generate;dur=\\d+(?:\\.\\d+)?$/);
+    expect(response.headers.get("server-timing")).toMatch(/^config_generate;dur=\d+(?:\.\d+)?$/);
     expect(response.headers.get("cache-control")).toBe("no-store");
     const body = await response.json() as { value: Record<string, unknown> };
     expect(body.value.id).toBe("cfg-1");
@@ -40,7 +40,7 @@ describe("Sakura Speed Lab server timing", () => {
 
     const response = await api.provision(owner, "sub-1", { templateId: "template-1" });
     expect(response.status).toBe(200);
-    expect(response.headers.get("server-timing")).toMatch(/^subscription_provision;dur=\\d+(?:\\.\\d+)?$/);
+    expect(response.headers.get("server-timing")).toMatch(/^subscription_provision;dur=\d+(?:\.\d+)?$/);
     expect(response.headers.get("cache-control")).toBe("no-store");
     const body = await response.json() as { value: Record<string, unknown> };
     expect(body.value.version).toBe(3);
