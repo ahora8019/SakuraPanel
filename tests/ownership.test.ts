@@ -85,7 +85,7 @@ describe("configuration ownership", () => {
 
   it("keeps configuration ownership attached to its owner", () => {
     expect(config.userId).toBe("user-2");
-    expect(config.payload.identity.userId).toBe("user-2");
+    expect(config.payload).toMatchObject({ identity: { userId: "user-2" } });
     expect(config).not.toHaveProperty("endpointId");
   });
 });
