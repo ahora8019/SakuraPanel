@@ -86,7 +86,7 @@ const link=location.origin+"/s/"+result.value.accessToken;
 $("generatorResult").textContent="✓ "+result.value.subscription.name+" — "+result.value.subscription.configCount+" configs generated (version "+result.value.subscription.version+").";
 $("out").textContent="Subscription link (save it now):\n"+link+"\n\nGenerated configs:\n"+JSON.stringify(result.value.configs,null,2);
 await load();
-}catch(x){const message=String(x);$("generatorResult").textContent=message.includes("template_not_found")?"No active template matches this protocol. Add an active protocol template with the required server/credential settings first.":"Generation failed: "+message;}
+}catch(x){const message=String(x);$("generatorResult").textContent=message.includes("template_not_found")?"No active template matches this protocol. Create one in Template Registry first.":message.includes("template_not_ready")?"The selected template is missing required server or credential fields. Update it in Template Registry first.":"Generation failed: "+message;}
 finally{button.disabled=false;button.textContent="🌸 Generate"}
 };
 $("subscriptionForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await api("/internal/subscriptions",{method:"POST",body:json({userId:f.get("userId"),name:f.get("name")||undefined,expiresAt:f.get("expiresAt")?new Date(f.get("expiresAt")).toISOString():undefined})});await load()}catch(x){$("out").textContent=String(x)}};

@@ -30,6 +30,7 @@ export class ConfigGeneratorApi {
         item => item.protocol.toLowerCase() === body.protocol.toLowerCase()
       );
       if (!template) throw new Error("template_not_found");
+      if (!isTemplateReady(template.definition, body.protocol)) throw new Error("template_not_ready");
 
       const createdAt = new Date().toISOString();
       const { subscription, accessToken } = await this.subscriptions.create(
@@ -96,12 +97,24 @@ function isGeneratorInput(value: unknown): value is GeneratorInput {
     typeof body.count === "number" && Number.isInteger(body.count) && body.count >= 1 && body.count <= 100;
 }
 
+function isTemplateReady(definition: Record<string, unknown>, protocol: SupportedProtocol): boolean {
+  if (typeof definition.server !== "string" || !definition.server.trim()) return false;
+  if (protocol === "VLESS" || protocol === "VMess") {
+    return typeof definition.uuid === "string" && definition.uuid.trim().length > 0;
+  }
+  if (protocol === "Trojan") {
+    return typeof definition.password === "string" && definition.password.length > 0;
+  }
+  return typeof definition.password === "string" && definition.password.length > 0 &&
+    typeof definition.method === "string" && definition.method.trim().length > 0;
+}
+
 function statusFor(error: unknown): number {
   const code = error instanceof Error ? error.message : "";
   if (code === "forbidden" || code === "user_not_active") return 403;
   if (code === "not_found" || code === "template_not_found" || code === "subscription_not_found") return 404;
   if (code === "conflict") return 409;
-  if (code === "validation_failed" || code === "invalid_expiration" ||
+  if (code === "validation_failed" || code === "template_not_ready" || code === "invalid_expiration" ||
       code === "subscription_expired" || code === "subscription_not_active") return 400;
   return 500;
 }

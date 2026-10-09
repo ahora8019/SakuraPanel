@@ -12,7 +12,7 @@ function responseBody(response: Response) {
 
 describe("ConfigGeneratorApi", () => {
   it("generates a named subscription and bounded config batch using a matching active template", async () => {
-    const template = { id: "template-vless", protocol: "VLESS", status: "ACTIVE" };
+    const template = { id: "template-vless", protocol: "VLESS", status: "ACTIVE", definition: { server: "proxy.example", uuid: "test-uuid" } };
     const templates = { list: vi.fn(async () => [template]) };
     const configs = {
       generateBatch: vi.fn(async (input: any) => [{
@@ -51,6 +51,21 @@ describe("ConfigGeneratorApi", () => {
     const api = new ConfigGeneratorApi({} as any, { list: vi.fn(async () => []) } as any, subscriptions as any);
     const response = await api.generate(context, {
       protocol: "VLESS", port: 443, subscriptionName: "Sakura", count: 101
+    });
+    expect(response.status).toBe(400);
+    expect(subscriptions.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a matching template without server credentials", async () => {
+    const subscriptions = { create: vi.fn() };
+    const template = { id: "template-vless", protocol: "VLESS", status: "ACTIVE", definition: {} };
+    const api = new ConfigGeneratorApi(
+      { generateBatch: vi.fn() } as any,
+      { list: vi.fn(async () => [template]) } as any,
+      subscriptions as any
+    );
+    const response = await api.generate(context, {
+      protocol: "VLESS", port: 443, subscriptionName: "Sakura", count: 1
     });
     expect(response.status).toBe(400);
     expect(subscriptions.create).not.toHaveBeenCalled();
