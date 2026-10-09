@@ -17,12 +17,15 @@ function config(overrides: Partial<GeneratedConfig> = {}): GeneratedConfig {
 
 describe("Config Studio", () => {
   it("serializes valid JSON deterministically and excludes internal user identity", () => {
-    const result = exportConfigs([config()], "json", "2026-10-02T00:00:00.000Z");
+    const result = exportConfigs([config({ payload: { uri: "vless://11111111-1111-4111-8111-111111111111@example.com:443", label: "東京", identity: { userId: "private-user" }, metadata: { templateId: "internal-template" } } })], "json", "2026-10-02T00:00:00.000Z");
     expect(result.count).toBe(1);
     expect(result.contentType).toContain("application/json");
     const decoded = JSON.parse(result.body);
     expect(decoded[0].payload.label).toBe("東京");
     expect(decoded[0].userId).toBeUndefined();
+    expect(decoded[0].payload.identity).toBeUndefined();
+    expect(decoded[0].payload.metadata).toBeUndefined();
+    expect(result.body).not.toContain("private-user");
   });
 
   it("filters expired and revoked configs", () => {
@@ -56,6 +59,12 @@ describe("Config Studio", () => {
     const binary = atob(result.body);
     const decoded = new TextDecoder().decode(Uint8Array.from(binary, char => char.charCodeAt(0)));
     expect(decoded).toBe(uri);
+  });
+
+  it("rejects malformed protocol URI fields instead of exporting them as valid configs", () => {
+    const result = exportConfigs([config({ payload: { uri: "vless://not-a-uuid@example.com:443" } })], "json");
+    expect(result.count).toBe(0);
+    expect(result.excluded.invalid).toBe(1);
   });
 
   it("rejects malformed configs and unsupported formats", () => {
