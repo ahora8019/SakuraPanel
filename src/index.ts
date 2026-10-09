@@ -71,6 +71,11 @@ export default {
       });
     }
 
+    // Static diagnostics shell stays available during Emergency Lock; its APIs remain authenticated.
+    if (request.method === "GET" && url.pathname === "/owner/labs") {
+      return ownerLabsResponse();
+    }
+
     if (!env.DB && url.pathname.startsWith("/internal/")) {
       return Response.json({ ok: false, error: "database_not_configured" }, { status: 503 });
     }
@@ -165,10 +170,6 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
 
     if (url.pathname === "/owner" && request.method === "GET") {
       return ownerDashboardResponse();
-    }
-
-    if (url.pathname === "/owner/labs" && request.method === "GET") {
-      return ownerLabsResponse();
     }
 
     if (env.DB && (
