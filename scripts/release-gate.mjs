@@ -45,7 +45,8 @@ for (const path of [
   "tests/readiness.test.ts",
   "tests/security.test.ts",
   "tests/user-authorization.test.ts",
-  "tests/v1-systems.test.ts"
+  "tests/v1-systems.test.ts",
+  "tests/v1-systems-api.test.ts"
 ]) {
   check("required_test:" + path, existsSync(path), existsSync(path) ? "test file exists; test execution is a separate gate" : "required regression test file is missing");
 }
