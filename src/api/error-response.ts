@@ -18,6 +18,7 @@ export function errorResponse(error: unknown, status = 500): Response {
     "subscription_not_found",
     "subscription_expired",
     "subscription_not_active",
+    "subscription_revoked_terminal",
     "no_eligible_configs",
     "version_not_found",
     "release_not_found",
