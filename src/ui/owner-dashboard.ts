@@ -76,5 +76,14 @@ $("provisionForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.
 $("rebuildForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);try{await api("/internal/subscriptions/"+encodeURIComponent(f.get("subscriptionId"))+"/rebuild",{method:"POST"});await load()}catch(x){$("out").textContent=String(x)}};
 $("refresh").onclick=()=>load().catch(x=>$("out").textContent=String(x));load().catch(()=>{});
 </script></body></html>`;
-  return new Response(html,{headers:{"content-type":"text/html; charset=UTF-8","cache-control":"no-store"}});
+  return new Response(html, { headers: {
+    "content-type": "text/html; charset=UTF-8",
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "strict-origin-when-cross-origin",
+    "permissions-policy": "camera=(), microphone=(), geolocation=()",
+    "cross-origin-resource-policy": "same-origin",
+    "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'"
+  }});
 }
