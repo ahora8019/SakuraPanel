@@ -229,7 +229,7 @@ export class V1SystemsApi {
                   CASE WHEN COUNT(s.id) = 0 THEN NULL ELSE MIN(s.healthy) END AS healthy,
                   AVG(s.latency_ms) AS latency_ms,
                   AVG(s.error_rate) AS error_rate,
-                  COUNT(s.id) AS sample_count,
+                  COUNT(CASE WHEN s.latency_ms IS NOT NULL AND s.error_rate IS NOT NULL THEN 1 END) AS sample_count,
                   MAX(s.measured_at) AS measured_at
              FROM route_candidates c
              LEFT JOIN route_health_samples s
