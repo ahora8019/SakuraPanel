@@ -160,6 +160,58 @@ describe("v1 systems API authorization", () => {
     expect(body.value.candidates).toEqual([]);
   });
 
+
+  it("returns a bounded non-sensitive history summary for real operation timings", async () => {
+    const db = {
+      prepare(sql: string) {
+        return {
+          bind() { return this; },
+          async first() { return { ok: 1 }; },
+          async all() {
+            if (sql.includes("operation_timing_samples")) {
+              return { results: [
+                { operation: "config_generate", measured_at: "2026-10-09T12:02:00.000Z", duration_ms: 12 },
+                { operation: "config_generate", measured_at: "2026-10-09T12:01:00.000Z", duration_ms: 10 },
+                { operation: "subscription_provision", measured_at: "2026-10-09T12:00:00.000Z", duration_ms: 20 }
+              ] };
+            }
+            return { results: [] };
+          }
+        };
+      }
+    } as unknown as D1Database;
+    const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
+    const response = await api.speed(context("OWNER", "owner-1"), { DB: db } as Env);
+    const body = await response.json() as { value: { timingHistory: { status: string; sampleCount: number; limit: number; operations: Array<{ operation: string; count: number; averageDurationMs: number }> } } };
+    expect(response.status).toBe(200);
+    expect(body.value.timingHistory.status).toBe("available");
+    expect(body.value.timingHistory.sampleCount).toBe(3);
+    expect(body.value.timingHistory.limit).toBe(100);
+    expect(body.value.timingHistory.operations.find(x => x.operation === "config_generate")?.averageDurationMs).toBe(11);
+    expect(JSON.stringify(body)).not.toContain("owner-1");
+  });
+
+  it("keeps Speed Lab available when historical telemetry has not been migrated", async () => {
+    const db = {
+      prepare(sql: string) {
+        return {
+          bind() { return this; },
+          async first() { return { ok: 1 }; },
+          async all() {
+            if (sql.includes("operation_timing_samples")) throw new Error("no such table");
+            return { results: [] };
+          }
+        };
+      }
+    } as unknown as D1Database;
+    const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
+    const response = await api.speed(context("OWNER", "owner-1"), { DB: db } as Env);
+    const body = await response.json() as { value: { timingHistory: { status: string; sampleCount: number } } };
+    expect(response.status).toBe(200);
+    expect(body.value.timingHistory.status).toBe("unavailable");
+    expect(body.value.timingHistory.sampleCount).toBe(0);
+  });
+
   it("returns insufficient data rather than inventing routes", async () => {
     const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
     const response = await api.routeAdvisor(context("OWNER", "owner-1"), {} as Env);
