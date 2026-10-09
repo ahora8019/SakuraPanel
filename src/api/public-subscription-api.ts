@@ -49,7 +49,11 @@ export class PublicSubscriptionApi {
         status: 400,
         headers: PUBLIC_HEADERS
       });
-      return errorResponse(error, 500);
+      const response = errorResponse(error, 500);
+      for (const [name, value] of Object.entries(PUBLIC_HEADERS)) {
+        response.headers.set(name, value);
+      }
+      return response;
     }
   }
 }
