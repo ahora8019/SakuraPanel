@@ -24,8 +24,8 @@ function hasSensitiveField(value: unknown, depth = 0): boolean {
 }
 
 function isValidConnectionUri(candidate: string): boolean {
-  if (candidate.length > 8192 || /[\\r\\n\\0]/.test(candidate)) return false;
-  const scheme = candidate.match(/^([a-z][a-z0-9+.-]*):\\/\\//i)?.[1]?.toLowerCase();
+  if (candidate.length > 8192 || /[\r\n\0]/.test(candidate)) return false;
+  const scheme = candidate.match(/^([a-z][a-z0-9+.-]*):\/\//i)?.[1]?.toLowerCase();
   if (!scheme || !URI_SCHEMES.has(scheme + ":")) return false;
 
   if (scheme === "vmess") {
@@ -37,7 +37,7 @@ function isValidConnectionUri(candidate: string): boolean {
       const payload = JSON.parse(decoded) as Record<string, unknown>;
       const port = Number(payload.port);
       return typeof payload.add === "string" && payload.add.length > 0 &&
-        !/[\\r\\n\\0]/.test(payload.add) && Number.isInteger(port) && port >= 1 && port <= 65535 &&
+        !/[\r\n\0]/.test(payload.add) && Number.isInteger(port) && port >= 1 && port <= 65535 &&
         typeof payload.id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(payload.id);
     } catch {
       return false;
