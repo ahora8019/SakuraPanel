@@ -1,7 +1,7 @@
 import type { ConfigRepository } from "../repositories/config-repository";
 import type { GeneratedConfig } from "../models/config";
 import type { SubscriptionRepository } from "../repositories/subscription-repository";
-import { exportConfigs, exportSubscriptionSnapshot, rankRoutes, timeBounded, type StudioFormat } from "../core/v1-systems";
+import { exportConfigs, exportSubscriptionSnapshot, rankRoutes, timeBounded, type StudioExport, type StudioFormat } from "../core/v1-systems";
 import { runPulse } from "../core/v1-diagnostics";
 import { requirePermission, type SecurityContext } from "../security/security-middleware";
 import type { Env } from "../types/env";
@@ -16,7 +16,7 @@ export class V1SystemsApi {
       const userId = ctx.principal.role === "MEMBER" ? ctx.principal.userId : (requestedUser || ctx.principal.userId);
       if (!userId || userId.length > 128) throw new Error("validation_failed");
       const format = (params.get("format") || "json") as StudioFormat;
-      let result;
+      let result: StudioExport;
 
       if (format === "subscription") {
         const subscriptionId = params.get("subscriptionId")?.trim();
