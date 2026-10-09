@@ -26,7 +26,7 @@ describe("SubscriptionEngine", () => {
     const foreign = { ...config("foreign"), userId: "user-2" };
     const version = new SubscriptionEngine().buildVersion({
       subscription,
-      configs: [foreign, config("cfg-1")],
+      configs: [foreign, config("cfg-1"), config("cfg-1")],
       now: "2026-01-01T00:01:00.000Z"
     });
     expect(version.configIds).toEqual(["cfg-1"]);
