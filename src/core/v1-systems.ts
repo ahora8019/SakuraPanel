@@ -1,7 +1,7 @@
 import type { GeneratedConfig } from "../models/config";
 import { validateGeneratedConfig } from "./config-validation";
 
-export type StudioState = "active" | "expired" | "disabled" | "invalid" | "sensitive";
+export type StudioState = "active" | "expired" | "disabled" | "invalid" | "sensitive" | "unavailable";
 export type StudioFormat = "json" | "links" | "subscription";
 
 export interface StudioItem {
@@ -125,7 +125,7 @@ export function exportConfigs(
   if (!Number.isFinite(Date.parse(now))) throw new Error("invalid_timestamp");
 
   const inspected = configs.map(config => inspectConfig(config, now));
-  const excluded: Record<StudioState, number> = { active: 0, expired: 0, disabled: 0, invalid: 0, sensitive: 0 };
+  const excluded: Record<StudioState, number> = { active: 0, expired: 0, disabled: 0, invalid: 0, sensitive: 0, unavailable: 0 };
   for (const item of inspected) if (item.state !== "active") excluded[item.state]++;
 
   const active = inspected.filter(item => item.state === "active").map(item => item.config);
@@ -150,7 +150,7 @@ export function exportConfigs(
     contentType: "text/plain; charset=utf-8",
     filename: "sakurapanel-links.txt",
     body,
-    excluded: { ...excluded, invalid: excluded.invalid + active.length - links.length }
+    excluded: { ...excluded, unavailable: excluded.unavailable + active.length - links.length }
   };
 }
 
