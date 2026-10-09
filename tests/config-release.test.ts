@@ -63,6 +63,7 @@ describe("config release lifecycle", () => {
     const firstRelease = await service.publish("cfg-1", 1, "owner-1", "2026-01-01T00:01:30.000Z");
     expect(firstRelease.status).toBe("PUBLISHED");
     expect((await service.list("cfg-1")).find(r => r.version === 2)?.status).toBe("SUPERSEDED");
+    await service.publish("cfg-1", 2, "owner-1", "2026-01-01T00:01:45.000Z");
 
     const rolledBack = await service.rollback("cfg-1", 1, "owner-1", "2026-01-01T00:02:00.000Z");
     expect(rolledBack.status).toBe("PUBLISHED");
