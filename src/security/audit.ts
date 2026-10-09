@@ -26,8 +26,15 @@ const SENSITIVE_KEYS = new Set([
   "secret",
   "token",
   "authorization",
-  "apiKey",
-  "privateKey"
+  "apikey",
+  "privatekey",
+  "access_token",
+  "refresh_token",
+  "client_secret",
+  "bootstrapsecret",
+  "tokenhash",
+  "password_hash",
+  "cookie"
 ]);
 
 export function sanitizeAuditMetadata(
