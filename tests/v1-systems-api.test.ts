@@ -79,6 +79,31 @@ describe("v1 systems API authorization", () => {
     expect(configRead).toBe(false);
   });
 
+  it("reports never_executed when scheduled Pulse history is empty", async () => {
+    const db = {
+      prepare() {
+        return {
+          bind() { return this; },
+          async first() { return null; },
+          async all() { return { results: [] }; }
+        };
+      }
+    } as unknown as D1Database;
+    const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
+    const response = await api.pulseHistory(context("OWNER", "owner-1"), { DB: db } as Env, new URLSearchParams("limit=10"));
+    const body = await response.json() as { value: { executionState: string; count: number; lastSuccessfulAt: string | null } };
+    expect(response.status).toBe(200);
+    expect(body.value.executionState).toBe("never_executed");
+    expect(body.value.count).toBe(0);
+    expect(body.value.lastSuccessfulAt).toBeNull();
+  });
+
+  it("rejects unbounded Pulse history limits", async () => {
+    const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
+    const response = await api.pulseHistory(context("OWNER", "owner-1"), { DB: {} as D1Database } as Env, new URLSearchParams("limit=1000"));
+    expect(response.status).toBe(400);
+  });
+
   it("returns insufficient data rather than inventing routes", async () => {
     const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
     const response = await api.routeAdvisor(context("OWNER", "owner-1"), {} as Env);
