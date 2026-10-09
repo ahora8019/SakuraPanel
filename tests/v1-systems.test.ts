@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GeneratedConfig } from "../src/models/config";
-import { exportConfigs, inspectConfig, rankRoutes, timeBounded } from "../src/core/v1-systems";
+import { exportConfigs, exportSubscriptionSnapshot, inspectConfig, rankRoutes, timeBounded } from "../src/core/v1-systems";
 
 function config(overrides: Partial<GeneratedConfig> = {}): GeneratedConfig {
   return {
@@ -53,12 +53,16 @@ describe("Config Studio", () => {
     expect(result.count).toBe(1);
   });
 
-  it("uses UTF-8 standard Base64 for subscription line lists and round-trips Unicode", () => {
+  it("matches the existing JSON subscription envelope and round-trips Unicode", () => {
     const uri = "vless://11111111-1111-4111-8111-111111111111@example.com:443?remarks=東京";
-    const result = exportConfigs([config({ payload: { uri } })], "subscription");
-    const binary = atob(result.body);
-    const decoded = new TextDecoder().decode(Uint8Array.from(binary, char => char.charCodeAt(0)));
-    expect(decoded).toBe(uri);
+    const result = exportSubscriptionSnapshot([config({ payload: { uri, label: "東京" } })], 7, "2026-11-01T00:00:00.000Z", "2026-10-02T00:00:00.000Z");
+    const decoded = JSON.parse(result.body);
+    expect(result.contentType).toContain("application/json");
+    expect(result.filename).toBe("sakurapanel-subscription.json");
+    expect(decoded.ok).toBe(true);
+    expect(decoded.value.version).toBe(7);
+    expect(decoded.value.configs[0].payload.label).toBe("東京");
+    expect(decoded.value.configs[0].payload.uri).toBe(uri);
   });
 
   it("rejects malformed protocol URI fields instead of exporting them as valid configs", () => {
