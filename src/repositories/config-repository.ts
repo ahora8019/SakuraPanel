@@ -82,8 +82,8 @@ export class D1ConfigRepository implements ConfigRepository {
 
   async updateStatus(id: string, status: ConfigStatus, updatedAt: string): Promise<boolean> {
     const result = await this.db.prepare(
-      "UPDATE configs SET status=?, updated_at=? WHERE id=?"
-    ).bind(status, updatedAt, id).run();
+      "UPDATE configs SET status=?, updated_at=? WHERE id=? AND NOT (status='REVOKED' AND ?='ACTIVE')"
+    ).bind(status, updatedAt, id, status).run();
     return result.meta.changes > 0;
   }
 
