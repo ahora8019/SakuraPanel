@@ -13,11 +13,13 @@ function makeService(initial: UserRecord[]) {
     create: async (user: UserRecord) => { users.push(user); },
     updateStatus: async (id: string, status: UserRecord["status"], updatedAt: string) => {
       const user = users.find(item => item.id === id);
-      if (user) {
-        user.status = status;
-        user.security_version += 1;
-        user.updated_at = updatedAt;
-      }
+      if (!user) return false;
+      if (user.role === "OWNER" && user.status === "ACTIVE" && status !== "ACTIVE" &&
+          users.filter(item => item.role === "OWNER" && item.status === "ACTIVE").length <= 1) return false;
+      user.status = status;
+      user.security_version += 1;
+      user.updated_at = updatedAt;
+      return true;
     }
   };
   return { service: new UserService(repo as unknown as D1UserRepository), users };
