@@ -16,7 +16,7 @@ This document describes the implemented behavior and its current limits. It is n
 - Performs read-only D1 checks for connectivity, required tables/columns/indexes, foreign-key integrity, active Owner setup, auth-secret configuration (length only), and Emergency Lock state.
 - Returns individual passed, failed, unavailable, or skipped checks and measured duration. A failed/skipped check is not reported as healthy.
 - The /ready endpoint exposes only check statuses, never secret values.
-- /internal/pulse and the existing diagnostics endpoint remain reachable during Emergency Lock for authenticated read-only diagnosis. All other protected operations retain the global lock guard.
+- /internal/pulse, /internal/pulse/history, and the existing diagnostics endpoint remain reachable during Emergency Lock for authenticated read-only diagnosis. All other protected operations retain the global lock guard.
 - The existing hourly Cloudflare Cron handler now runs Pulse and records scheduled results in migration 0019 system_check_runs. Duplicate slots are ignored, stale running rows are recovered, and retention is bounded to 30 days / 1,000 rows. The history API is Owner-only. This history remains unavailable in an environment until migration 0019 is applied.
 
 ## Sakura Speed Lab
