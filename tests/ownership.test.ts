@@ -66,20 +66,20 @@ describe("configuration ownership", () => {
     expect(calls.listUserId).toBe("user-1");
   });
 
-  it("binds config generation to the authenticated member, not body.userId", async () => {
+  it("denies config generation to MEMBER because config:write is not granted", async () => {
     const { api, calls } = makeApi();
     const response = await api.generate(memberContext, {
       userId: "user-2",
       templateId: "tpl-1"
     });
-    expect(response.status).toBe(201);
-    expect(calls.generatedUserId).toBe("user-1");
+    expect(response.status).toBe(403);
+    expect(calls.generatedUserId).toBeUndefined();
   });
 
-  it("does not allow a member to change another user's config status", async () => {
+  it("denies MEMBER config status updates through RBAC", async () => {
     const { api, calls } = makeApi();
     const response = await api.updateStatus(memberContext, "cfg-1", { status: "REVOKED" });
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(403);
     expect(calls.updateStatus).toBeUndefined();
   });
 
