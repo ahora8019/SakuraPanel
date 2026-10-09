@@ -389,7 +389,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     );
     const diagnosticsApi = new DiagnosticsApi();
     const auditApi = new AuditApi(new D1AuditRepository(env.DB!));
-    const v1SystemsApi = new V1SystemsApi(configRepository);
+    const v1SystemsApi = new V1SystemsApi(configRepository, subscriptionRepository);
 
     if (url.pathname === "/internal/diagnostics" && request.method === "GET") {
       return diagnosticsApi.get(context, env);
