@@ -3,6 +3,7 @@ import {
   isCookieMutationSameOrigin,
   limitRequestBody
 } from "../src/security/request-hardening";
+import { ownerDashboardResponse } from "../src/ui/owner-dashboard";
 
 describe("request security hardening", () => {
   it("blocks cross-origin mutations carrying the browser session cookie", () => {
@@ -64,4 +65,13 @@ describe("request security hardening", () => {
     });
     expect(await limitRequestBody(request, 1024)).toBeNull();
   });
+  it("serves the owner dashboard with a restrictive browser policy", () => {
+    const response = ownerDashboardResponse();
+    expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+    expect(response.headers.get("content-security-policy")).toContain("connect-src 'self'");
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
 });
