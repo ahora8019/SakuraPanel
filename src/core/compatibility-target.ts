@@ -22,7 +22,7 @@ export function parseCompatibilityTarget(params: URLSearchParams): Compatibility
 
   const platformValues = params.getAll("platform");
   const protocolValues = params.getAll("protocol");
-  const clients = params.getAll("client");
+  const clients = params.getAll("client").map(client => client.trim());
   const features = params.getAll("feature");
   const platform = platformValues[0];
   const protocol = protocolValues[0];
