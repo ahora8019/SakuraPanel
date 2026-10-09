@@ -194,7 +194,14 @@ export class SubscriptionService {
         throw new Error("subscription_expired");
       }
     }
-    if (!(await this.repository.updateStatus(id, status, now))) throw new Error("subscription_not_found");
+    if (!(await this.repository.updateStatus(id, status, now))) {
+      const latest = await this.repository.findById(id);
+      if (!latest) throw new Error("subscription_not_found");
+      if (latest.status === "REVOKED" && status === "ACTIVE") {
+        throw new Error("subscription_revoked_terminal");
+      }
+      throw new Error("subscription_not_found");
+    }
     return this.get(id);
   }
 }
