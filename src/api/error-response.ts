@@ -21,7 +21,8 @@ export function errorResponse(error: unknown, status = 500): Response {
     "no_eligible_configs",
     "version_not_found",
     "release_not_found",
-    "service_not_configured"
+    "service_not_configured",
+    "owner_status_protected"
   ]);
   const publicCode = safeCodes.has(code) ? code : "internal_error";
   return Response.json({ ok: false, error: publicCode }, {
