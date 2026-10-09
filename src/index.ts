@@ -403,6 +403,9 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     if (url.pathname === "/internal/pulse" && request.method === "GET") {
       return v1SystemsApi.pulse(context, env);
     }
+    if (url.pathname === "/internal/pulse/history" && request.method === "GET") {
+      return v1SystemsApi.pulseHistory(context, env, url.searchParams);
+    }
     if (url.pathname === "/internal/speed" && request.method === "POST") {
       return v1SystemsApi.speed(context, env);
     }
