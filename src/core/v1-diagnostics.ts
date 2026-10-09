@@ -27,7 +27,8 @@ const REQUIRED_COLUMNS: Record<string, string[]> = {
   subscription_versions: ["id", "subscription_id", "version", "config_ids_json"],
   auth_sessions: ["id", "user_id", "token_version", "expires_at", "revoked_at"],
   audit_logs: ["id", "actor_id", "action", "resource", "created_at"],
-  rate_limit_buckets: ["key", "reset_at", "count"]
+  rate_limit_buckets: ["key", "reset_at", "count"],
+  system_check_runs: ["id", "scheduled_slot", "status", "started_at", "completed_at", "duration_ms", "result_json"]
 };
 
 const REQUIRED_INDEXES = [
@@ -40,7 +41,8 @@ const REQUIRED_INDEXES = [
   "idx_subscription_versions_subscription_version",
   "idx_audit_logs_actor_id", "idx_audit_logs_created_at", "idx_audit_logs_resource",
   "idx_audit_logs_actor_created_at", "idx_audit_logs_resource_created_at",
-  "idx_auth_sessions_user_id", "idx_auth_sessions_expires_at", "idx_rate_limit_buckets_reset_at"
+  "idx_auth_sessions_user_id", "idx_auth_sessions_expires_at", "idx_rate_limit_buckets_reset_at",
+  "idx_system_check_runs_started_at", "idx_system_check_runs_status_started_at"
 ] as const;
 
 const FORBIDDEN_LEGACY_TABLES = ["endpoints", "endpoint_health", "endpoint_groups", "endpoint_group_members"] as const;
