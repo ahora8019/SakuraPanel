@@ -83,26 +83,35 @@ export async function runDiagnostics(env: Env, deep = true): Promise<Diagnostics
 export interface ReadinessResult {
   ok: boolean;
   database: DiagnosticCheck;
+  authentication: DiagnosticCheck;
 }
 
 export async function runReadiness(env: Env): Promise<ReadinessResult> {
+  const authentication: DiagnosticCheck =
+    typeof env.AUTH_SECRET === "string" && env.AUTH_SECRET.length >= 32
+      ? { status: "ok" }
+      : { status: "error", detail: "auth_secret_not_configured_or_too_short" };
+
   if (!env.DB) {
     return {
       ok: false,
-      database: { status: "error", detail: "database_not_configured" }
+      database: { status: "error", detail: "database_not_configured" },
+      authentication
     };
   }
 
   try {
     await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
     return {
-      ok: true,
-      database: { status: "ok" }
+      ok: authentication.status === "ok",
+      database: { status: "ok" },
+      authentication
     };
   } catch {
     return {
       ok: false,
-      database: { status: "error", detail: "database_check_failed" }
+      database: { status: "error", detail: "database_check_failed" },
+      authentication
     };
   }
 }
