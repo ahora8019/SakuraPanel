@@ -16,6 +16,7 @@ export async function runScheduledPulse(env: Env, scheduledTime = Date.now()): P
   const scheduledSlot = date.toISOString().slice(0, 13) + ":00:00Z";
   const startedAt = new Date().toISOString();
   const runId = crypto.randomUUID();
+  let claimed = false;
 
   try {
     await env.DB.prepare(
@@ -31,6 +32,7 @@ export async function runScheduledPulse(env: Env, scheduledTime = Date.now()): P
       "INSERT INTO system_check_runs (id, scheduled_slot, status, started_at, completed_at, duration_ms, result_json) VALUES (?, ?, 'running', ?, NULL, 0, '{}') ON CONFLICT(scheduled_slot) DO NOTHING"
     ).bind(runId, scheduledSlot, startedAt).run();
     if (inserted.meta.changes === 0) return { status: "running", scheduledSlot, reason: "duplicate_slot" };
+    claimed = true;
 
     const report = await runPulse(env);
     const finalStatus = report.status === "passed" ? "passed" : report.status === "failed" ? "failed" : "unavailable";
@@ -47,6 +49,15 @@ export async function runScheduledPulse(env: Env, scheduledTime = Date.now()): P
     return { status: finalStatus, scheduledSlot, runId };
   } catch {
     // Never log exception text from database/runtime errors; it may include sensitive context.
+    if (claimed) {
+      try {
+        await env.DB.prepare(
+          "UPDATE system_check_runs SET status='unavailable', completed_at=?, result_json=? WHERE id=?"
+        ).bind(new Date().toISOString(), JSON.stringify({ status: "unavailable", reason: "scheduled_execution_failed" }), runId).run();
+      } catch {
+        // The next scheduled run will recover a stale running row if storage is still unavailable.
+      }
+    }
     return { status: "unavailable", scheduledSlot, runId, reason: "history_storage_failed" };
   }
 }
