@@ -13,7 +13,7 @@ import { findClientDefinition } from "./client-compatibility-registry";
 const PLATFORMS: readonly ClientPlatform[] = ["ANDROID", "IOS", "WINDOWS", "MACOS", "LINUX", "OTHER"];
 const PROTOCOLS: readonly ClientProtocol[] = ["VLESS", "VMESS", "TROJAN", "SHADOWSOCKS", "OTHER"];
 const FEATURES: readonly CompatibilityFeature[] = ["TCP", "TLS", "REALITY", "WEBSOCKET", "GRPC", "HTTP2", "QUIC"];
-const VERSION_PATTERN = /^\\d+(?:\\.\\d+){0,3}$/;
+const VERSION_PATTERN = /^\d+(?:\.\d+){0,3}$/;
 
 function compareVersions(left: string, right: string): number {
   const a = left.split(".").map(Number);
