@@ -165,7 +165,7 @@ export function exportSubscriptionSnapshot(
   if (!Number.isFinite(Date.parse(now))) throw new Error("invalid_timestamp");
 
   const inspected = configs.map(config => inspectConfig(config, now));
-  const excluded: Record<StudioState, number> = { active: 0, expired: 0, disabled: 0, invalid: 0, sensitive: 0 };
+  const excluded: Record<StudioState, number> = { active: 0, expired: 0, disabled: 0, invalid: 0, sensitive: 0, unavailable: 0 };
   for (const item of inspected) if (item.state !== "active") excluded[item.state]++;
   const active = inspected.filter(item => item.state === "active").map(item => item.config);
   const body = JSON.stringify({
