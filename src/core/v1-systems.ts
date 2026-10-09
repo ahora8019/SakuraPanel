@@ -117,10 +117,10 @@ export interface StudioExport {
 
 export function exportConfigs(
   configs: GeneratedConfig[],
-  format: StudioFormat,
+  format: Exclude<StudioFormat, "subscription">,
   now = new Date().toISOString()
 ): StudioExport {
-  if (!["json", "links", "subscription"].includes(format)) throw new Error("unsupported_export_format");
+  if (format !== "json" && format !== "links") throw new Error("unsupported_export_format");
   if (configs.length > MAX_EXPORT_CONFIGS) throw new Error("export_limit_exceeded");
   if (!Number.isFinite(Date.parse(now))) throw new Error("invalid_timestamp");
 
@@ -143,26 +143,54 @@ export function exportConfigs(
   }
 
   const links = active.map(validConnectionUri).filter((value): value is string => value !== null);
-  if (format === "links") {
-    const body = links.join("\n");
-    return { format, count: links.length, contentType: "text/plain; charset=utf-8", filename: "sakurapanel-links.txt", body, excluded: { ...excluded, invalid: excluded.invalid + active.length - links.length } };
-  }
-
-  // Subscription output follows the common UTF-8 + standard Base64 line-list form.
-  // Only already-present, recognized connection URIs are emitted; SakuraPanel does not
-  // synthesize protocol payloads or rewrite credentials.
-  const plainText = links.join("\n");
-  const bytes = new TextEncoder().encode(plainText);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  const body = btoa(binary);
+  const body = links.join("\n");
   return {
     format,
     count: links.length,
     contentType: "text/plain; charset=utf-8",
-    filename: "sakurapanel-subscription.txt",
+    filename: "sakurapanel-links.txt",
     body,
     excluded: { ...excluded, invalid: excluded.invalid + active.length - links.length }
+  };
+}
+
+export function exportSubscriptionSnapshot(
+  configs: GeneratedConfig[],
+  version: number,
+  subscriptionExpiresAt?: string,
+  now = new Date().toISOString()
+): StudioExport {
+  if (!Number.isInteger(version) || version < 1) throw new Error("invalid_subscription_version");
+  if (configs.length > MAX_EXPORT_CONFIGS) throw new Error("export_limit_exceeded");
+  if (!Number.isFinite(Date.parse(now))) throw new Error("invalid_timestamp");
+
+  const inspected = configs.map(config => inspectConfig(config, now));
+  const excluded: Record<StudioState, number> = { active: 0, expired: 0, disabled: 0, invalid: 0, sensitive: 0 };
+  for (const item of inspected) if (item.state !== "active") excluded[item.state]++;
+  const active = inspected.filter(item => item.state === "active").map(item => item.config);
+  const body = JSON.stringify({
+    ok: true,
+    value: {
+      version,
+      ...(subscriptionExpiresAt ? { expiresAt: subscriptionExpiresAt } : {}),
+      configs: active.map(config => ({
+        id: config.id,
+        ...(config.deviceId ? { deviceId: config.deviceId } : {}),
+        templateId: config.templateId,
+        templateVersion: config.templateVersion,
+        payload: exportPayload(config.payload),
+        ...(config.expiresAt ? { expiresAt: config.expiresAt } : {})
+      }))
+    }
+  }, null, 2);
+  JSON.parse(body);
+  return {
+    format: "subscription",
+    count: active.length,
+    contentType: "application/json; charset=utf-8",
+    filename: "sakurapanel-subscription.json",
+    body,
+    excluded
   };
 }
 
