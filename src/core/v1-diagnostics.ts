@@ -43,6 +43,8 @@ const REQUIRED_INDEXES = [
   "idx_auth_sessions_user_id", "idx_auth_sessions_expires_at", "idx_rate_limit_buckets_reset_at"
 ] as const;
 
+const FORBIDDEN_LEGACY_TABLES = ["endpoints", "endpoint_health", "endpoint_groups", "endpoint_group_members"] as const;
+
 const REQUIRED_FOREIGN_KEYS: Record<string, Array<{ from: string; table: string; to: string }>> = {
   devices: [{ from: "user_id", table: "users", to: "id" }],
   configs: [
@@ -103,6 +105,7 @@ export async function runPulse(env: Env): Promise<PulseReport> {
         const tables = await env.DB!.prepare("SELECT name FROM sqlite_master WHERE type='table'").all<{ name: string }>();
         const names = new Set((tables.results ?? []).map(row => row.name));
         const missingTables = Object.keys(REQUIRED_COLUMNS).filter(name => !names.has(name));
+        const unexpectedLegacyTables = FORBIDDEN_LEGACY_TABLES.filter(name => names.has(name));
         const missingColumns: string[] = [];
         for (const [table, columns] of Object.entries(REQUIRED_COLUMNS)) {
           if (!names.has(table)) continue;
@@ -123,9 +126,9 @@ export async function runPulse(env: Env): Promise<PulseReport> {
             if (!actual.has(signature)) missingForeignKeys.push(table + "." + signature);
           }
         }
-        return { missingTables, missingColumns, missingIndexes, missingForeignKeys };
+        return { missingTables, missingColumns, missingIndexes, missingForeignKeys, unexpectedLegacyTables };
       });
-      const schemaOkay = schemaResult.ok && schemaResult.value!.missingTables.length === 0 && schemaResult.value!.missingColumns.length === 0 && schemaResult.value!.missingIndexes.length === 0 && schemaResult.value!.missingForeignKeys.length === 0;
+      const schemaOkay = schemaResult.ok && schemaResult.value!.missingTables.length === 0 && schemaResult.value!.missingColumns.length === 0 && schemaResult.value!.missingIndexes.length === 0 && schemaResult.value!.missingForeignKeys.length === 0 && schemaResult.value!.unexpectedLegacyTables.length === 0;
       checks.push({
         name: "database_schema",
         status: !schemaResult.ok ? (schemaResult.error === "timeout" ? "unavailable" : "failed") : schemaOkay ? "passed" : "failed",
@@ -135,7 +138,8 @@ export async function runPulse(env: Env): Promise<PulseReport> {
             ...(schemaResult.value!.missingTables.length ? ["missing_tables:" + schemaResult.value!.missingTables.join(",")] : []),
             ...(schemaResult.value!.missingColumns.length ? ["missing_columns:" + schemaResult.value!.missingColumns.join(",")] : []),
             ...(schemaResult.value!.missingIndexes.length ? ["missing_indexes:" + schemaResult.value!.missingIndexes.join(",")] : []),
-            ...(schemaResult.value!.missingForeignKeys.length ? ["missing_foreign_keys:" + schemaResult.value!.missingForeignKeys.join(",")] : [])
+            ...(schemaResult.value!.missingForeignKeys.length ? ["missing_foreign_keys:" + schemaResult.value!.missingForeignKeys.join(",")] : []),
+            ...(schemaResult.value!.unexpectedLegacyTables.length ? ["unexpected_legacy_tables:" + schemaResult.value!.unexpectedLegacyTables.join(",")] : [])
           ].join(";") } : {})
       });
 
