@@ -62,7 +62,8 @@ export default {
         requestId,
         checks: {
           database: readiness.database.status,
-          securityControl: readiness.securityControl.status
+          securityControl: readiness.securityControl.status,
+          authentication: readiness.authentication.status
         }
       }, {
         status: readiness.ok ? 200 : 503,
