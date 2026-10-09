@@ -13,7 +13,7 @@ describe("D1 migration contract", () => {
     expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
     expect(new Set(numbers).size).toBe(numbers.length);
     expect(numbers[0]).toBe(1);
-    expect(numbers.at(-1)).toBe(18);
+    expect(numbers.at(-1)).toBe(19);
   });
 
   it("contains the core tables required by the application", () => {
