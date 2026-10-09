@@ -13,11 +13,17 @@ export interface ConfigRepository {
 
 function mapConfig(row: Record<string, unknown>): GeneratedConfig {
   let payload: Record<string, unknown> = {};
+  let invalidPayload = false;
   try {
     const parsed = JSON.parse(String(row.payload ?? "{}"));
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) payload = parsed;
+    else invalidPayload = true;
   } catch {
-    payload = {};
+    invalidPayload = true;
+  }
+  if (invalidPayload) {
+    // Non-enumerable marker lets diagnostics/export reject corrupt stored JSON without leaking it.
+    Object.defineProperty(payload, "__sakurapanelInvalidPayload", { value: true, enumerable: false });
   }
 
   return {
