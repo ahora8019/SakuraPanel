@@ -76,13 +76,13 @@ export class ConfigService {
     if (!["ACTIVE", "EXPIRED", "REVOKED"].includes(status)) throw new Error("validation_failed");
     const current = await this.configs.findById(id);
     if (!current) throw new Error("not_found");
-    if (current.status === "REVOKED" && status === "ACTIVE") {
+    if (current.status === "REVOKED" && status !== "REVOKED") {
       throw new Error("config_revoked_terminal");
     }
     if (!(await this.configs.updateStatus(id, status, now))) {
       const latest = await this.configs.findById(id);
       if (!latest) throw new Error("not_found");
-      if (latest.status === "REVOKED" && status === "ACTIVE") throw new Error("config_revoked_terminal");
+      if (latest.status === "REVOKED" && status !== "REVOKED") throw new Error("config_revoked_terminal");
       throw new Error("not_found");
     }
     return this.get(id);
