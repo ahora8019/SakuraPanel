@@ -60,7 +60,7 @@ export class ConfigReleaseService {
     if (!this.audit) return;
     await this.audit.write(createAuditEvent({
       actorId,
-      action: action === "PUBLISH" ? "UPDATE" : "REVOKE",
+      action,
       resource: "config_release",
       resourceId: configId,
       metadata: { version: String(version), releaseAction: action }
