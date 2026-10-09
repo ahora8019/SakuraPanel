@@ -11,7 +11,7 @@ export interface StudioItem {
 }
 
 const URI_SCHEMES = new Set(["vless:", "vmess:", "trojan:", "ss:"]);
-const SENSITIVE_KEY = /(?:^|_)(?:secret|password|passwd|privatekey|private_key|admincredential|sessiontoken|authtoken|accesstoken|refresh_token)(?:$|_)/i;
+const SENSITIVE_KEY = /(?:^|_)(?:secret|password|passwd|privatekey|private_key|admincredential|sessiontoken|authtoken|accesstoken|refresh_token|api_key|client_secret|credential|bearer|token)(?:$|_)/i;
 const MAX_EXPORT_CONFIGS = 100;
 
 function hasSensitiveField(value: unknown, depth = 0): boolean {
@@ -63,6 +63,12 @@ export function inspectConfig(config: GeneratedConfig, now = new Date().toISOStr
   return { config, state: "active", reasons: [] };
 }
 
+function exportPayload(payload: Record<string, unknown>): Record<string, unknown> {
+  // ConfigEngine owns these wrapper fields; they are not part of a protocol payload.
+  const { identity: _identity, metadata: _metadata, ...protocolPayload } = payload;
+  return protocolPayload;
+}
+
 export interface StudioExport {
   format: StudioFormat;
   count: number;
@@ -93,7 +99,7 @@ export function exportConfigs(
       templateVersion: config.templateVersion,
       status: config.status,
       ...(config.expiresAt ? { expiresAt: config.expiresAt } : {}),
-      payload: config.payload
+      payload: exportPayload(config.payload)
     })), null, 2);
     JSON.parse(body);
     return { format, count: active.length, contentType: "application/json; charset=utf-8", filename: "sakurapanel-configs.json", body, excluded };
