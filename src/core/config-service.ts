@@ -56,7 +56,7 @@ export class ConfigService {
     });
 
     const validation = validateGeneratedConfig(config);
-    if (!validation.valid) throw new Error(validation.errors.join(","));
+    if (!validation.valid) throw new Error("validation_failed");
 
     await this.configs.save(config);
     return config;
