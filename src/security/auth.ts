@@ -153,6 +153,20 @@ export class AuthService {
       return null;
     }
 
+    // JSON.parse can produce null or arrays even when parsing succeeds. Guard
+    // the decoded shapes before reading fields so malformed bearer tokens are
+    // rejected rather than throwing through request authentication.
+    if (
+      !parsedHeader ||
+      typeof parsedHeader !== "object" ||
+      Array.isArray(parsedHeader) ||
+      !payload ||
+      typeof payload !== "object" ||
+      Array.isArray(payload)
+    ) {
+      return null;
+    }
+
     if (
       parsedHeader.alg !== "HS256" ||
       parsedHeader.typ !== "SPAT" ||
