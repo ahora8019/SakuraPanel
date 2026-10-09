@@ -3,6 +3,7 @@ import { authenticateRequest } from "./security/security-middleware";
 import { UserApi } from "./api/user-api";
 import { DeviceApi } from "./api/device-api";
 import { ConfigApi } from "./api/config-api";
+import { ConfigGeneratorApi } from "./api/config-generator-api";
 import { ConfigCompatibilityApi } from "./api/config-compatibility-api";
 import { ConfigReleaseApi } from "./api/config-release-api";
 import { ConfigService } from "./core/config-service";
@@ -473,6 +474,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     const deviceApi = new DeviceApi(deviceService);
     const templateApi = new TemplateApi(templateService);
     const configApi = new ConfigApi(configService);
+    const configGeneratorApi = new ConfigGeneratorApi(configService, templateService, subscriptionService);
     const configCompatibilityApi = new ConfigCompatibilityApi(configService);
     const configReleaseService = new ConfigReleaseService(
       configRepository,
@@ -508,6 +510,12 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       return templateApi.updateStatus(context, decodePathSegment(templateStatusMatch[1]), body);
+    }
+
+    if (url.pathname === "/internal/config-generator" && request.method === "POST") {
+      let body: unknown;
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return configGeneratorApi.generate(context, body);
     }
 
     if (url.pathname === "/internal/configs" && request.method === "GET") {

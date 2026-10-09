@@ -62,6 +62,55 @@ export class ConfigService {
     return config;
   }
 
+  async generateBatch(input: {
+    identity: ConfigIdentity;
+    templateId: string;
+    count: number;
+    expiresAt?: string;
+    now?: string;
+    payloadOverrides?: (index: number, total: number) => Record<string, unknown>;
+  }): Promise<GeneratedConfig[]> {
+    if (!input.identity.userId || !input.templateId ||
+        !Number.isInteger(input.count) || input.count < 1 || input.count > 100) {
+      throw new Error("validation_failed");
+    }
+    if (this.users) {
+      const user = await this.users.findById(input.identity.userId);
+      if (!user || user.status !== "ACTIVE") throw new Error("user_not_active");
+    }
+    const now = input.now ?? new Date().toISOString();
+    const nowMs = Date.parse(now);
+    if (!Number.isFinite(nowMs)) throw new Error("invalid_timestamp");
+    if (input.expiresAt) {
+      const expiresMs = Date.parse(input.expiresAt);
+      if (!Number.isFinite(expiresMs) || expiresMs <= nowMs) throw new Error("invalid_expiration");
+    }
+    if (input.identity.deviceId) {
+      if (!this.devices) throw new Error("service_not_configured");
+      const device = await this.devices.findById(input.identity.deviceId);
+      if (!device || device.userId !== input.identity.userId || device.status !== "ACTIVE") {
+        throw new Error("device_not_owned");
+      }
+    }
+    const template = await this.templates.findById(input.templateId);
+    if (!template) throw new Error("template_not_found");
+    const generated: GeneratedConfig[] = [];
+    for (let index = 1; index <= input.count; index += 1) {
+      const config = this.engine.generate({
+        identity: input.identity,
+        template,
+        expiresAt: input.expiresAt,
+        now,
+        payloadOverrides: input.payloadOverrides?.(index, input.count)
+      });
+      const validation = validateGeneratedConfig(config);
+      if (!validation.valid) throw new Error("validation_failed");
+      generated.push(config);
+    }
+    await this.configs.saveMany(generated);
+    return generated;
+  }
+
   async get(id: string): Promise<GeneratedConfig> {
     const config = await this.configs.findById(id);
     if (!config) throw new Error("not_found");

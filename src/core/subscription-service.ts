@@ -13,8 +13,9 @@ export class SubscriptionService {
     private readonly users?: UserRepository
   ) {}
 
-  async create(userId: string, expiresAt?: string, now = new Date().toISOString()): Promise<{ subscription: Subscription; accessToken: string }> {
-    if (!userId) throw new Error("validation_failed");
+  async create(userId: string, expiresAt?: string, now = new Date().toISOString(), name = "Subscription"): Promise<{ subscription: Subscription; accessToken: string }> {
+    const normalizedName = name.trim();
+    if (!userId || !normalizedName || normalizedName.length > 64) throw new Error("validation_failed");
     if (this.users) {
       const user = await this.users.findById(userId);
       if (!user || user.status !== "ACTIVE") throw new Error("user_not_active");
@@ -32,6 +33,7 @@ export class SubscriptionService {
     const subscription: Subscription = {
       id: crypto.randomUUID(),
       userId,
+      name: normalizedName,
       status: "ACTIVE",
       ...(expiresAt ? { expiresAt } : {}),
       publicTokenHash,
@@ -168,6 +170,25 @@ export class SubscriptionService {
     }
 
     throw new Error("version_conflict");
+  }
+
+  async recordGeneratedConfigs(
+    subscriptionId: string,
+    configIds: string[],
+    now = new Date().toISOString()
+  ): Promise<SubscriptionVersion> {
+    if (configIds.length < 1 || configIds.length > 100 || new Set(configIds).size !== configIds.length) {
+      throw new Error("validation_failed");
+    }
+    const subscription = await this.get(subscriptionId);
+    if (subscription.status !== "ACTIVE") throw new Error("subscription_not_active");
+    const nowMs = Date.parse(now);
+    if (!Number.isFinite(nowMs)) throw new Error("invalid_timestamp");
+    if (subscription.expiresAt) {
+      const expiresMs = Date.parse(subscription.expiresAt);
+      if (!Number.isFinite(expiresMs) || expiresMs <= nowMs) throw new Error("subscription_expired");
+    }
+    return this.saveNextVersion(subscriptionId, configIds, now);
   }
 
   async getLatestVersion(subscriptionId: string): Promise<SubscriptionVersion | null> {
