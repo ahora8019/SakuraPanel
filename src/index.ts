@@ -376,7 +376,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       }, { status: 201 });
     }
 
-    let context;
+    let context: Awaited<ReturnType<typeof authenticateRequest>> = null;
     try {
       context = await authenticateRequest(request, auth, env.DB);
     } catch {
