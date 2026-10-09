@@ -53,6 +53,7 @@ export function inspectConfig(config: GeneratedConfig, now = new Date().toISOStr
   if (reasons.length) return { config, state: "invalid", reasons };
   if (hasSensitiveField(config.payload)) return { config, state: "sensitive", reasons: ["sensitive_fields_excluded"] };
   const nowMs = Date.parse(now);
+  if (config.status === "EXPIRED") return { config, state: "expired", reasons: ["configuration_expired"] };
   if (config.expiresAt) {
     const expiresAt = Date.parse(config.expiresAt);
     if (!Number.isFinite(expiresAt)) return { config, state: "invalid", reasons: ["invalid_expiration"] };
@@ -153,6 +154,7 @@ export interface RouteEvidence {
   healthy: boolean | null;
   latencyMs: number | null;
   errorRate: number | null;
+  sampleCount: number;
   measuredAt: string | null;
 }
 
@@ -169,12 +171,13 @@ export function rankRoutes(candidates: RouteEvidence[], now = new Date().toISOSt
     const reasons: string[] = [];
     const ageMs = candidate.measuredAt ? nowMs - Date.parse(candidate.measuredAt) : Infinity;
     const fresh = ageMs >= 0 && ageMs <= 15 * 60_000;
-    const evidenceValid = candidate.healthy !== null && candidate.latencyMs !== null &&
+    const evidenceValid = Number.isInteger(candidate.sampleCount) && candidate.sampleCount >= 3 && candidate.healthy !== null && candidate.latencyMs !== null &&
       Number.isFinite(candidate.latencyMs) && candidate.latencyMs >= 0 &&
       candidate.errorRate !== null && Number.isFinite(candidate.errorRate) &&
       candidate.errorRate >= 0 && candidate.errorRate <= 1 && fresh;
     if (!candidate.compatible) reasons.push("incompatible");
     if (!fresh) reasons.push("health_or_latency_evidence_stale_or_missing");
+    if (!Number.isInteger(candidate.sampleCount) || candidate.sampleCount < 3) reasons.push("minimum_three_samples_required");
     if (candidate.healthy === false) reasons.push("endpoint_unhealthy");
     if (candidate.latencyMs === null) reasons.push("latency_missing");
     if (candidate.errorRate === null) reasons.push("error_rate_missing");
