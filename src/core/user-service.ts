@@ -8,6 +8,7 @@ export class UserService {
 
   async create(input: { username: string; role: Role; actorRole: Role; now: string }): Promise<User> {
     if (!isRole(input.role) || !isRole(input.actorRole)) throw new Error("validation_failed");
+    if (input.actorRole !== "OWNER" && input.actorRole !== "ADMIN") throw new Error("forbidden");
     if (input.actorRole !== "OWNER" && input.role !== "MEMBER") throw new Error("forbidden");
     const username = input.username.trim();
     if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)) throw new Error("validation_failed");
@@ -22,7 +23,18 @@ export class UserService {
     if (!current) throw new Error("not_found");
     if (!isRole(actorRole) || !["ACTIVE", "SUSPENDED", "DISABLED"].includes(status)) throw new Error("validation_failed");
     if (actorRole !== "OWNER" && roleRank(actorRole) <= roleRank(current.role)) throw new Error("forbidden");
-    await this.users.updateStatus(id, status, now);
+    if (current.role === "OWNER" && current.status === "ACTIVE" && status !== "ACTIVE") {
+      if (await this.users.countActiveOwners() <= 1) throw new Error("last_active_owner");
+    }
+    const changed = await this.users.updateStatus(id, status, now);
+    if (!changed) {
+      const latest = await this.users.findById(id);
+      if (!latest) throw new Error("not_found");
+      if (latest.role === "OWNER" && latest.status === "ACTIVE" && status !== "ACTIVE") {
+        throw new Error("last_active_owner");
+      }
+      throw new Error("conflict");
+    }
     const updated = await this.users.findById(id);
     if (!updated) throw new Error("not_found");
     return toUser(updated);

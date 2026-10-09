@@ -1,118 +1,36 @@
 # SakuraPanel — Next-Generation Roadmap
 
-## Product principle
+## Product principles
 
-SakuraPanel is not a clone of BPB, Nahan, Zeus, or EdgeTunnel. Those projects are functional benchmarks only. SakuraPanel prioritizes:
+SakuraPanel is a Cloudflare-native panel, not a clone of BPB, Nahan, Zeus, or EdgeTunnel. Priorities are security, stability, performance, compatibility, maintainability, then visual polish. The current edition does not require external VPS endpoints.
 
-1. Security
-2. Stability
-3. Performance
-4. Compatibility
-5. Maintainability
-6. UX/design last
+## Implemented in source (must still be verified against the deployed revision)
 
-No VPS/endpoint architecture is planned for the current Cloudflare-native edition.
+- D1-backed users, devices, templates, configs, subscriptions, sessions, audit logs, and rate limiting.
+- Config generation, validation, versioning, release tracking, and subscription delivery.
+- Role/permission policy for OWNER, ADMIN, and MEMBER.
+- Session validation, token expiry, security-version invalidation, and audit-field redaction.
+- Emergency Lock that fails closed when its required KV binding is absent or unavailable.
+- Health and readiness endpoints; readiness includes database and security-control checks.
+- CI dependency audit, typecheck, and test steps.
+- Manual-only production deployment workflow with pre-deploy audit/typecheck/tests and a post-deploy smoke test.
 
-## Feature set to build
+## v1.0.0 release gates
 
-### Core / Backend
-- Config Validation Engine
-- Config Versioning and Release model
-- Config publish/rollback
-- Subscription Delivery Engine hardening
-- Subscription self-diagnostics
-- Subscription diagnostics API and automated integrity tests
-- Client Compatibility Matrix (metadata model + validation + compatibility evaluator)
-- Request IDs and structured logs
-- Production health/readiness checks
-- Audit Timeline (paginated API + RBAC + safe metadata)
-- Backup/restore procedures
-- Config release tracking
-- Published-version delivery isolation
+1. **CI:** current `main` commit passes dependency audit, typecheck, and full tests.
+2. **RBAC/Owner:** endpoint-by-endpoint role matrix and cross-user ownership regression tests; verify no MEMBER can access another user's resources or grant privileges.
+3. **Backup/restore:** create a real export, retain it securely outside Git, restore it to an isolated D1 database, and verify schema/integrity/counts.
+4. **Preview:** deploy an isolated preview Worker with its own D1 database, KV namespace, and independent secrets.
+5. **Production:** verify deployed revision and bindings, run smoke tests, verify `/ready` reports both database and security control healthy, and test authenticated owner flows.
+6. **UI:** complete and test mobile-first owner dashboard and subscription experience, including loading/error/empty states, keyboard access, and responsive layout.
+7. **Release:** tag `v1.0.0` only after all gates have recorded PASS evidence.
 
-### Security
-- RBAC and ownership isolation
-- Token hashing and rotation
-- Rate limiting
-- Emergency lock
-- Security-version invalidation
-- Security headers
-- Fail-closed subscription delivery
-- Abuse detection
-- Audit events for security-sensitive mutations
+## Remaining work
 
-### Deployment / Operations
-- CI typecheck + tests
-- D1 migration gate
-- Production smoke tests
-- Config release migration + CI/deploy verification
-- Deployment health checks
-- Workers version rollback procedure
-- Preview environments with isolated D1/secrets
-- Secret rotation procedure
-- Incident/diagnostics center
-- Observability (Logs + Traces)
-
-### Data / D1
-- Append-only migrations
-- Expand → migrate → contract for breaking schema changes
-- Query/index review
-- Version uniqueness constraints
-- Ownership-safe queries
-- Recovery/backup runbook
-
-### Subscription UX
-- Mobile-first subscription page
-- Status / expiry / config count
-- Copy and QR actions
-- Client-aware output
-- Diagnostics without leaking sensitive data
-- Fast, cache-safe public delivery
-- Sakura branding and lightweight animation
-
-### Admin UX
-- System health
-- Database health
-- Security health
-- Subscription health
-- Deployment status
-- Audit timeline
-- Diagnostics Center
-- Analytics
-- Incident Center
-
-## Current implementation status
-
-Already implemented or substantially present:
-- D1 + KV Cloudflare-native architecture
-- Endpoint removal
-- RBAC/auth/session hardening
-- D1 rate limiting
-- Config generation + validation
-- Config version records
-- Subscription token hashing/rotation
-- Public subscription delivery
-- Ownership checks
-- Audit storage
-- CI/CD with D1 migrations
-- Production deployment through GitHub Actions
-
-Next implementation batch:
-1. Backup/restore runbook
-2. Preview environment
-3. Final dashboard and subscription UI
-
-## Important operational rule
-
-Do not automatically roll back application code after a failed post-deploy check when a database migration has already been applied. First use backward-compatible migrations (expand/migrate/contract), then allow safe Worker-version rollback.
-
-## Benchmarks
-
-BPB demonstrates broad client compatibility and subscription-oriented tooling. SakuraPanel should learn from those capabilities while keeping its own architecture, security model, and codebase.
-
-References used during architecture research:
-- Cloudflare Workers/D1 documentation
-- BPB Worker Panel
-- Nahan
-- EdgeTunnel
-- Current Cloudflare serverless deployment patterns
+- Complete the full RBAC and ownership audit; current unit tests are not sufficient for a complete route-level certification.
+- Define and test behavior for missing client-IP headers and D1 rate-limit storage failures.
+- Review request-body limits, content-type validation, path decoding, response security headers, and cache policy route by route.
+- Build and validate the preview environment without production credentials or data.
+- Perform a real backup and isolated restore drill.
+- Finish the UI and run authenticated end-to-end tests.
+- Verify the deployed Worker is updated to the current repository commit; a live readiness response without `checks.securityControl` indicates an older deployment.

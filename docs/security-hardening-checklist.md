@@ -1,45 +1,33 @@
-# Stage 9 — Security & Abuse Hardening
+# SakuraPanel — Security and Abuse Hardening Audit
 
-## Status
+## Scope and status
 
-**In progress.** This document records the first source-level review and defines the order of work. It is not a penetration-test report and does not certify production security.
+This is a source-level checklist plus CI evidence, not a penetration-test report or a production security certification.
 
-## Confirmed observations from the current source
+- [x] Emergency lock fails closed when `SECURITY_KV` is missing or cannot be read.
+- [x] Readiness checks both D1 connectivity and emergency-lock state.
+- [x] RBAC role/permission policy is centralized in `src/security/permissions.ts`.
+- [x] Production deployment workflow is manual-only and runs dependency audit, typecheck, and tests before D1 migrations/deployment.
+- [ ] Re-run CI for the current `main` commit after the Emergency Lock merge.
+- [ ] Full endpoint-by-endpoint RBAC and Owner authorization audit with regression tests.
+- [ ] Cross-user ownership tests for every read/write route and resource type.
+- [ ] Missing/invalid client-IP behavior and D1 rate-limit storage-failure behavior.
+- [ ] Consistent security headers and no-store policy verified across all route families.
+- [ ] Request-body size limits, content-type validation, malformed path handling, and auth-abuse boundary tests.
+- [ ] Confirm production live deployment contains the Emergency Lock fix. The live `/ready` response must expose `checks.securityControl`; if absent, production is behind the repository.
+- [ ] Actual backup artifact downloaded and securely retained.
+- [ ] Restore drill completed against an isolated D1 database.
+- [ ] Isolated preview deployment validated with separate D1 and secrets.
+- [ ] Production smoke test and authenticated owner flows executed against the deployed revision.
 
-- The emergency lock check in `src/index.ts` runs only when `SECURITY_KV` is bound. The production Wrangler configuration binds it, but a missing binding bypasses the lock check rather than failing closed.
-- `src/security/abuse-detection.ts` stores scores in an in-process `Map`. The request handler does not currently import or invoke `AbuseDetector`, so it must not be counted as active production abuse protection.
-- Rate limiting is implemented with an atomic D1 upsert in `src/security/kv-rate-limit.ts`. The request handler uses `CF-Connecting-IP` and falls back to the shared key `unknown` when that header is absent; this can make unrelated requests share a bucket.
-- Security headers are set on public subscription responses, but response headers are assembled separately across other routes. Header coverage needs to be checked route-by-route before claiming a global baseline.
-- The owner bootstrap endpoint returns a session token in its JSON response. Any caller handling that response must treat it as a credential and must never log or persist it in plaintext.
+## Confirmed implementation details
 
-## Priority order
+- Rate limiting is stored in D1 using an atomic upsert; `RATE_LIMIT_KV` is not used by the current runtime.
+- The request handler currently falls back to the shared key `unknown` if `CF-Connecting-IP` is absent. This needs an explicit tested policy so unrelated requests do not share a rate-limit bucket.
+- `AbuseDetector` uses an in-process `Map` and is not invoked by the main request handler. It must not be counted as active distributed production protection.
+- The Owner UI and bootstrap/login paths require live authentication-flow tests. A page rendering successfully is not proof that login, session revocation, role checks, or mutations work.
+- A successful CI run verifies the checked commit, not the currently deployed Worker or its live secrets/bindings.
 
-### P0 — Fail-closed security controls
-- Decide and enforce the expected behavior when `SECURITY_KV` is absent or unavailable. Production must not silently skip the emergency-lock control.
-- Add regression tests for both a missing binding and KV read failures. Keep local development behavior explicit rather than relying on accidental bypasses.
+## Release acceptance criteria
 
-### P1 — Request and authentication abuse controls
-- Define behavior for a missing or invalid client-IP header on sensitive routes; avoid silently placing all such requests into one shared rate-limit bucket.
-- Normalize rate-limit storage failures into an explicit fail-closed response without leaking SQL/runtime details.
-- Add bounded request-body handling and strict content-type validation for JSON/form endpoints.
-- Add tests for malformed path encoding, oversized bodies, failed login/bootstrap attempts, and rate-limit boundary conditions.
-- Decide whether `AbuseDetector` should become a bounded, shared production control or remain a test utility. An in-memory per-isolate map must not be presented as reliable cross-request/cross-isolate enforcement.
-
-### P1 — Response and secret handling
-- Establish a consistent security-header baseline for health, readiness, owner UI, bootstrap, public subscription, and internal API responses, without breaking the bootstrap page's required inline assets.
-- Verify that errors, logs, diagnostics, and audit metadata never expose session tokens, bootstrap secrets, subscription tokens, or raw credential values.
-- Ensure sensitive responses are not cacheable.
-
-### P2 — Verification and operations
-- Add regression tests for each hardened behavior.
-- Run typecheck, unit tests, dependency audit, and deployment smoke tests.
-- Review production bindings and secret configuration without printing secret values.
-- Update the roadmap only after the relevant checks pass; CI success alone is not a production security audit.
-
-## Acceptance criteria
-
-- Missing critical production security bindings fail closed.
-- Abuse controls have documented, tested behavior under missing headers and storage failures.
-- Security headers and cache policy are verified across every route family.
-- Credential values are excluded from logs and audit metadata.
-- Typecheck, tests, dependency audit, and smoke test pass for the resulting commit.
+Do not label the release `v1.0.0` until the outstanding security, ownership, backup/restore, preview, UI, and production checks above have evidence attached to the exact release commit. Keep failed workflow history; fix failures rather than deleting evidence.
