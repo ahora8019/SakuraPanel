@@ -93,7 +93,7 @@ export default {
       }
     }
 
-    const readOnlyDiagnosticPath = request.method === "GET" && (url.pathname === "/internal/pulse" || url.pathname === "/internal/diagnostics");
+    const readOnlyDiagnosticPath = request.method === "GET" && (url.pathname === "/internal/pulse" || url.pathname === "/internal/pulse/history" || url.pathname === "/internal/diagnostics");
 
     if (!env.SECURITY_KV && !readOnlyDiagnosticPath) {
       return Response.json({ ok: false, error: "security_control_not_configured" }, {
