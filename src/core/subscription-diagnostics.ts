@@ -62,7 +62,25 @@ export class SubscriptionDiagnosticsService {
       };
     }
 
-    if (version.configIds.length > 100) issues.push("config_limit_exceeded");
+    if (version.configIds.length > 100) {
+      issues.push("config_limit_exceeded");
+      return {
+        subscriptionId,
+        status: "error",
+        subscription: base,
+        latestVersion: { version: version.version, configCount: version.configIds.length },
+        configs: {
+          referenced: version.configIds.length,
+          eligible: 0,
+          missing: 0,
+          inactive: 0,
+          expired: 0,
+          wrongOwner: 0
+        },
+        ...(compatibilityTarget ? { compatibility: { checked: 0, compatible: 0, partial: 0, incompatible: 0, unknown: 0 } } : {}),
+        issues
+      };
+    }
     const rows = await this.configs.listByIds(version.configIds);
     const byId = new Map(rows.map(c => [c.id, c]));
     let eligible = 0, missing = 0, inactive = 0, configExpired = 0, wrongOwner = 0;
