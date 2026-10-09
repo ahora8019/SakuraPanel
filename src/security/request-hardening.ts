@@ -48,7 +48,6 @@ export async function limitRequestBody(
     if (!/^\d+$/.test(declaredLength) || Number(declaredLength) > maxBytes) return null;
   }
 
-  const requestTemplate = request.clone();
   const reader = request.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -74,5 +73,16 @@ export async function limitRequestBody(
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new Request(requestTemplate, { body: bytes });
+  return new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body: bytes,
+    redirect: request.redirect,
+    credentials: request.credentials,
+    cache: request.cache,
+    mode: request.mode,
+    referrer: request.referrer,
+    referrerPolicy: request.referrerPolicy,
+    integrity: request.integrity
+  });
 }
