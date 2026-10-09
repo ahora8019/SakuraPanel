@@ -146,8 +146,11 @@ export default {
       }
     }
 
-    if (!env.AUTH_SECRET) {
-      return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
+    if (typeof env.AUTH_SECRET !== "string" || env.AUTH_SECRET.length < 32) {
+      return Response.json({ ok: false, error: "service_not_configured" }, {
+        status: 503,
+        headers: { "cache-control": "no-store", "retry-after": "5" }
+      });
     }
 
     const auth = new AuthService(env.AUTH_SECRET);
