@@ -34,6 +34,31 @@ describe("v1 systems API authorization", () => {
     expect(body.value.count).toBe(1);
   });
 
+  it("lists filterable config metadata without returning payloads", async () => {
+    const configs = {
+      listByUserId: async () => [ownConfig]
+    } as unknown as ConfigRepository;
+    const api = new V1SystemsApi(configs, {} as SubscriptionRepository);
+    const response = await api.configStudio(context("MEMBER", "member-1"), {} as Env, new URLSearchParams("format=inspect"));
+    const body = await response.json() as { value: { items: Array<Record<string, unknown>> } };
+    expect(response.status).toBe(200);
+    expect(body.value.items[0].state).toBe("active");
+    expect(body.value.items[0].payload).toBeUndefined();
+  });
+
+  it("exports only selected config IDs and validates their ownership", async () => {
+    let requested: string[] = [];
+    const configs = {
+      listByIds: async (ids: string[]) => { requested = ids; return [ownConfig]; }
+    } as unknown as ConfigRepository;
+    const api = new V1SystemsApi(configs, {} as SubscriptionRepository);
+    const response = await api.configStudio(context("MEMBER", "member-1"), {} as Env, new URLSearchParams("format=json&ids=config-1"));
+    const body = await response.json() as { value: { count: number } };
+    expect(response.status).toBe(200);
+    expect(requested).toEqual(["config-1"]);
+    expect(body.value.count).toBe(1);
+  });
+
   it("rejects unauthenticated Pulse requests server-side", async () => {
     const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
     const response = await api.pulse(null, {} as Env);
