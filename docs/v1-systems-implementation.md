@@ -4,9 +4,9 @@ This document describes the implemented behavior and its current limits. It is n
 
 ## Config Studio
 
-- Reads existing D1 config records through the existing repository; no new configuration store is introduced.
+- Reads existing D1 config records through the existing repository; no new configuration store is introduced. The UI can inspect up to 100 records at a time, filter by state, select records, and export only selected IDs; server-side ownership is checked again on export.
 - Enforces config:read server-side. MEMBER exports are always scoped to the authenticated user's ID, regardless of a supplied userId.
-- JSON export validates the model, excludes expired/revoked/invalid/sensitive records, and omits the internal identity and metadata wrapper keys that ConfigEngine adds.
+- JSON export validates the model, excludes expired/revoked/invalid/sensitive records, and omits the internal identity and metadata wrapper keys that ConfigEngine adds. Corrupt, non-object, or missing stored payload JSON is marked invalid through a non-enumerable internal marker so the marker itself is never exported.
 - Protocol links are emitted only when an existing payload already contains a syntactically valid connection URI for a scheme represented by the current compatibility model (VLESS, VMess, Trojan, Shadowsocks). SakuraPanel does not synthesize protocol payloads.
 - Subscription export requires an existing subscription ID, checks ownership/status/expiry, reads its real latest version and referenced configs, and emits the current public subscription JSON envelope. The existing public endpoint is JSON, so this implementation deliberately does not invent a Base64 client format.
 - Sensitive credential-bearing fields exclude the whole record rather than redacting a protocol payload in a way that could silently break it.
@@ -21,7 +21,7 @@ This document describes the implemented behavior and its current limits. It is n
 
 ## Sakura Speed Lab
 
-- Takes one bounded server-side D1 SELECT 1 timing sample and one local JSON serialization timing sample.
+- Takes one bounded server-side D1 SELECT 1 timing sample and one local JSON serialization timing sample. The UI separately measures browser-observed API round-trip time.
 - Reports measurement scope and explicitly warns that a single sample is not a benchmark.
 - Cloudflare platform analytics and external-service timing are reported as unavailable because the Worker does not currently have an analytics binding or configured external route model.
 - Samples are not persisted for historical comparison.
