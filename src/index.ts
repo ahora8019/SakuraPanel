@@ -74,12 +74,19 @@ export default {
 
     if (env.DB && url.pathname.startsWith("/internal/")) {
       const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
-      const decision = await new KvRateLimiter(env.DB).check(clientKey, 120, 60_000);
-      if (!decision.allowed) {
-        return Response.json(
-          { ok: false, error: "rate_limited" },
-          { status: 429, headers: { "retry-after": String(decision.retryAfterSeconds ?? 1), "cache-control": "no-store" } }
-        );
+      try {
+        const decision = await new KvRateLimiter(env.DB).check(clientKey, 120, 60_000);
+        if (!decision.allowed) {
+          return Response.json(
+            { ok: false, error: "rate_limited" },
+            { status: 429, headers: { "retry-after": String(decision.retryAfterSeconds ?? 1), "cache-control": "no-store" } }
+          );
+        }
+      } catch {
+        return Response.json({ ok: false, error: "service_unavailable" }, {
+          status: 503,
+          headers: { "cache-control": "no-store", "retry-after": "5" }
+        });
       }
     }
 
@@ -185,11 +192,18 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       (url.pathname === "/internal/bootstrap/session" && request.method === "POST")
     )) {
       const clientKey = request.headers.get("CF-Connecting-IP") ?? "unknown";
-      const decision = await new KvRateLimiter(env.DB).check(`auth:${clientKey}`, 10, 60_000);
-      if (!decision.allowed) {
-        return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), {
-          status: 429,
-          headers: { "content-type": "application/json", "retry-after": String(decision.retryAfterSeconds ?? 1), "cache-control": "no-store" }
+      try {
+        const decision = await new KvRateLimiter(env.DB).check(`auth:${clientKey}`, 10, 60_000);
+        if (!decision.allowed) {
+          return new Response(JSON.stringify({ ok: false, error: "rate_limited" }), {
+            status: 429,
+            headers: { "content-type": "application/json", "retry-after": String(decision.retryAfterSeconds ?? 1), "cache-control": "no-store" }
+          });
+        }
+      } catch {
+        return Response.json({ ok: false, error: "service_unavailable" }, {
+          status: 503,
+          headers: { "cache-control": "no-store", "retry-after": "5" }
         });
       }
     }
@@ -362,7 +376,15 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       }, { status: 201 });
     }
 
-    const context = await authenticateRequest(request, auth, env.DB);
+    let context;
+    try {
+      context = await authenticateRequest(request, auth, env.DB);
+    } catch {
+      return Response.json({ ok: false, error: "service_unavailable" }, {
+        status: 503,
+        headers: { "cache-control": "no-store", "retry-after": "5" }
+      });
+    }
     const userRepository = new D1UserRepository(env.DB!);
     const deviceRepository = new D1DeviceRepository(env.DB!);
     const templateRepository = new D1TemplateRepository(env.DB!);
