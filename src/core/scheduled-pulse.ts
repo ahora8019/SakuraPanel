@@ -18,8 +18,12 @@ export async function runScheduledPulse(env: Env, scheduledTime = Date.now()): P
   const runId = crypto.randomUUID();
 
   try {
+    await env.DB.prepare(
+      "UPDATE system_check_runs SET status='unavailable', completed_at=?, result_json=? WHERE status='running' AND julianday(started_at) < julianday('now','-2 hours')"
+    ).bind(new Date().toISOString(), JSON.stringify({ status: "unavailable", reason: "stale_run_recovered" })).run();
+
     const active = await env.DB.prepare(
-      "SELECT id FROM system_check_runs WHERE status='running' AND started_at >= datetime('now','-2 hours') LIMIT 1"
+      "SELECT id FROM system_check_runs WHERE status='running' AND julianday(started_at) >= julianday('now','-2 hours') LIMIT 1"
     ).first<{ id: string }>();
     if (active) return { status: "running", scheduledSlot, reason: "another_run_in_progress" };
 
@@ -35,7 +39,7 @@ export async function runScheduledPulse(env: Env, scheduledTime = Date.now()): P
     ).bind(finalStatus, new Date().toISOString(), report.durationMs, JSON.stringify(report), runId).run();
 
     // Keep history bounded by age and row count; never store credentials or raw request data.
-    await env.DB.prepare("DELETE FROM system_check_runs WHERE started_at < datetime('now','-30 days')").run();
+    await env.DB.prepare("DELETE FROM system_check_runs WHERE julianday(started_at) < julianday('now','-30 days')").run();
     await env.DB.prepare(
       "DELETE FROM system_check_runs WHERE id IN (SELECT id FROM system_check_runs ORDER BY started_at DESC LIMIT -1 OFFSET 1000)"
     ).run();
