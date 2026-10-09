@@ -76,9 +76,12 @@ export async function runPulse(env: Env): Promise<PulseReport> {
           const actual = new Set((rows.results ?? []).map(row => row.name));
           for (const column of columns) if (!actual.has(column)) missingColumns.push(table + "." + column);
         }
-        return { missingTables, missingColumns };
+        const indexes = await env.DB!.prepare("SELECT name FROM sqlite_master WHERE type='index'").all<{ name: string }>();
+        const indexNames = new Set((indexes.results ?? []).map(row => row.name));
+        const missingIndexes = REQUIRED_INDEXES.filter(name => !indexNames.has(name));
+        return { missingTables, missingColumns, missingIndexes };
       });
-      const schemaOkay = schemaResult.ok && schemaResult.value!.missingTables.length === 0 && schemaResult.value!.missingColumns.length === 0;
+      const schemaOkay = schemaResult.ok && schemaResult.value!.missingTables.length === 0 && schemaResult.value!.missingColumns.length === 0 && schemaResult.value!.missingIndexes.length === 0;
       checks.push({
         name: "database_schema",
         status: !schemaResult.ok ? (schemaResult.error === "timeout" ? "unavailable" : "failed") : schemaOkay ? "passed" : "failed",
@@ -86,7 +89,8 @@ export async function runPulse(env: Env): Promise<PulseReport> {
         ...(!schemaResult.ok ? { detail: schemaResult.error === "timeout" ? "schema_check_timeout" : "schema_check_failed" } :
           !schemaOkay ? { detail: [
             ...(schemaResult.value!.missingTables.length ? ["missing_tables:" + schemaResult.value!.missingTables.join(",")] : []),
-            ...(schemaResult.value!.missingColumns.length ? ["missing_columns:" + schemaResult.value!.missingColumns.join(",")] : [])
+            ...(schemaResult.value!.missingColumns.length ? ["missing_columns:" + schemaResult.value!.missingColumns.join(",")] : []),
+            ...(schemaResult.value!.missingIndexes.length ? ["missing_indexes:" + schemaResult.value!.missingIndexes.join(",")] : [])
           ].join(";") } : {})
       });
 
