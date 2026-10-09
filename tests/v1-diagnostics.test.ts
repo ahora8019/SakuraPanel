@@ -16,7 +16,7 @@ const columns: Record<string, string[]> = {
   rate_limit_buckets: ["key", "reset_at", "count"]
 };
 const indexes = [
-  "idx_devices_user_id", "idx_devices_user_status_created_at", "idx_configs_user_id",
+  "idx_users_single_owner", "idx_devices_user_id", "idx_devices_user_status_created_at", "idx_configs_user_id",
   "idx_configs_template_id", "idx_configs_user_created_at", "idx_configs_device_created_at",
   "idx_config_versions_config_id", "idx_config_versions_config_version", "idx_config_releases_config_created_at",
   "idx_config_releases_status", "idx_subscriptions_user_id", "idx_subscriptions_user_created_at",
@@ -26,7 +26,19 @@ const indexes = [
   "idx_auth_sessions_user_id", "idx_auth_sessions_expires_at", "idx_rate_limit_buckets_reset_at"
 ];
 
-function fakeDb(options: { missingColumn?: string; queryFailure?: boolean; foreignKeyViolation?: boolean } = {}): D1Database {
+const foreignKeys: Record<string, Array<{ from: string; table: string; to: string }>> = {
+  configs: [
+    { from: "user_id", table: "users", to: "id" },
+    { from: "device_id", table: "devices", to: "id" },
+    { from: "template_id", table: "templates", to: "id" }
+  ],
+  config_versions: [{ from: "config_id", table: "configs", to: "id" }],
+  config_releases: [{ from: "config_id", table: "configs", to: "id" }],
+  subscriptions: [{ from: "user_id", table: "users", to: "id" }],
+  subscription_versions: [{ from: "subscription_id", table: "subscriptions", to: "id" }],
+  auth_sessions: [{ from: "user_id", table: "users", to: "id" }]
+};
+function fakeDb(options: { missingColumn?: string; queryFailure?: boolean; foreignKeyViolation?: boolean; missingForeignKey?: string } = {}): D1Database {
   const db = {
     prepare(sql: string) {
       return {
@@ -48,6 +60,10 @@ function fakeDb(options: { missingColumn?: string; queryFailure?: boolean; forei
           }
           if (sql.includes("sqlite_master") && sql.includes("type='index'")) return { results: indexes.map(name => ({ name })) };
           if (sql.includes("PRAGMA foreign_key_check")) return { results: options.foreignKeyViolation ? [{ table: "configs" }] : [] };
+          if (sql.includes("PRAGMA foreign_key_list(")) {
+            const table = sql.match(/PRAGMA foreign_key_list\\(([^)]+)\\)/)?.[1] ?? "";
+            return { results: (foreignKeys[table] ?? []).filter(key => table + "." + key.from + "->" + key.table + "." + key.to !== options.missingForeignKey) };
+          }
           return { results: [] };
         }
       };
@@ -78,6 +94,12 @@ describe("Sakura Pulse", () => {
     const report = await runPulse(env({ db: fakeDb({ missingColumn: "configs.published_version" }), kv: fakeKv() }));
     expect(report.status).toBe("failed");
     expect(report.checks.find(check => check.name === "database_schema")?.status).toBe("failed");
+  });
+
+  it("fails schema health when a required foreign-key constraint is missing", async () => {
+    const report = await runPulse(env({ db: fakeDb({ missingForeignKey: "configs.template_id->templates.id" }), kv: fakeKv() }));
+    expect(report.status).toBe("failed");
+    expect(report.checks.find(check => check.name === "database_schema")?.detail).toContain("missing_foreign_keys");
   });
 
   it("fails when foreign-key violations are detected", async () => {
