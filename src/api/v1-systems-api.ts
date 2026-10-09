@@ -1,4 +1,5 @@
 import type { ConfigRepository } from "../repositories/config-repository";
+import type { GeneratedConfig } from "../models/config";
 import type { SubscriptionRepository } from "../repositories/subscription-repository";
 import { exportConfigs, exportSubscriptionSnapshot, rankRoutes, timeBounded, type StudioFormat } from "../core/v1-systems";
 import { runPulse } from "../core/v1-diagnostics";
@@ -36,7 +37,7 @@ export class V1SystemsApi {
         if (version.configIds.length > 100) throw new Error("export_limit_exceeded");
         const rows = await this.configs.listByIds(version.configIds);
         const byId = new Map(rows.map(config => [config.id, config]));
-        const ordered = version.configIds.map(id => byId.get(id)).filter((config): config is NonNullable<typeof config> => Boolean(config));
+        const ordered = version.configIds.map(id => byId.get(id)).filter((config): config is GeneratedConfig => Boolean(config));
         if (ordered.some(config => config.userId !== subscription.userId)) throw new Error("subscription_not_found");
         result = exportSubscriptionSnapshot(ordered, version.version, subscription.expiresAt, now);
         if (result.count === 0) throw new Error("no_eligible_configs");
