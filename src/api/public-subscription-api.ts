@@ -22,7 +22,7 @@ export class PublicSubscriptionApi {
 
   async get(token: string, searchParams?: URLSearchParams): Promise<Response> {
     try {
-      const target = searchParams && hasCompatibilityTarget(searchParams)
+      const target = searchParams && [...searchParams.keys()].length > 0
         ? parseTarget(searchParams)
         : undefined;
       const snapshot = await this.service.getSnapshot(token, new Date().toISOString(), target);
