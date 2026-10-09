@@ -73,7 +73,9 @@ export default {
         requestId,
         checks: {
           database: readiness.database.status,
-          authentication: readiness.authentication.status
+          authentication: readiness.authentication.status,
+          bootstrapAuthentication: readiness.bootstrapAuthentication.status,
+          emergencyLock: readiness.emergencyLock.status
         }
       }, {
         status: readiness.ok ? 200 : 503,
@@ -280,7 +282,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     }
 
     if (url.pathname === "/owner/login" && request.method === "POST") {
-      if (!env.DB || !env.BOOTSTRAP_SECRET) return new Response("Service not configured", { status: 503 });
+      if (!env.DB || typeof env.BOOTSTRAP_SECRET !== "string" || env.BOOTSTRAP_SECRET.length < 32) return new Response("Service not configured", { status: 503 });
 
       let form: FormData;
       try { form = await request.formData(); }
@@ -319,7 +321,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     }
 
     if (url.pathname === "/internal/bootstrap" && request.method === "POST") {
-      if (!env.DB || !env.BOOTSTRAP_SECRET) return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
+      if (!env.DB || typeof env.BOOTSTRAP_SECRET !== "string" || env.BOOTSTRAP_SECRET.length < 32) return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
 
       const existing = await env.DB.prepare("SELECT COUNT(*) AS count FROM users").first<{ count: number }>();
       if ((existing?.count ?? 0) > 0) return Response.json({ ok: false, error: "bootstrap_already_completed" }, { status: 409 });
@@ -388,7 +390,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     }
 
     if (url.pathname === "/internal/bootstrap/session" && request.method === "POST") {
-      if (!env.DB || !env.BOOTSTRAP_SECRET) return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
+      if (!env.DB || typeof env.BOOTSTRAP_SECRET !== "string" || env.BOOTSTRAP_SECRET.length < 32) return Response.json({ ok: false, error: "service_not_configured" }, { status: 503 });
 
       let body: unknown;
       try {
