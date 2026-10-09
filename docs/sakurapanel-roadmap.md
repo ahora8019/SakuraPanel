@@ -1,118 +1,101 @@
 # SakuraPanel — Next-Generation Roadmap
 
-## Product principle
+## Product principles
 
-SakuraPanel is not a clone of BPB, Nahan, Zeus, or EdgeTunnel. Those projects are functional benchmarks only. SakuraPanel prioritizes:
+SakuraPanel is an independent Cloudflare-native project. Other projects may be used as functional benchmarks, not as code or identity to copy.
+
+Priorities, in order:
 
 1. Security
 2. Stability
 3. Performance
 4. Compatibility
 5. Maintainability
-6. UX/design last
+6. UX and visual polish
 
-No VPS/endpoint architecture is planned for the current Cloudflare-native edition.
+The current edition does not require a separately managed VPS or endpoint service.
 
-## Feature set to build
+## Capability areas
 
-### Core / Backend
-- Config Validation Engine
-- Config Versioning and Release model
-- Config publish/rollback
-- Subscription Delivery Engine hardening
-- Subscription self-diagnostics
-- Subscription diagnostics API and automated integrity tests
-- Client Compatibility Matrix (metadata model + validation + compatibility evaluator)
-- Request IDs and structured logs
-- Production health/readiness checks
-- Audit Timeline (paginated API + RBAC + safe metadata)
-- Backup/restore procedures
-- Config release tracking
-- Published-version delivery isolation
+### Core / backend
+- Config validation and template-based generation
+- Config versioning, release publishing, and rollback
+- Subscription delivery hardening and token lifecycle
+- Subscription diagnostics and integrity checks
+- Client compatibility metadata and evaluation
+- Request IDs, structured logs, health/readiness checks
+- Audit timeline and role-based access control
+- Backup/restore procedures and published-version isolation
 
 ### Security
 - RBAC and ownership isolation
 - Token hashing and rotation
-- Rate limiting
+- Rate limiting and abuse detection
 - Emergency lock
 - Security-version invalidation
-- Security headers
+- Security headers and request hardening
 - Fail-closed subscription delivery
-- Abuse detection
 - Audit events for security-sensitive mutations
 
-### Deployment / Operations
-- CI typecheck + tests
-- D1 migration gate
-- Production smoke tests
-- Config release migration + CI/deploy verification
-- Deployment health checks
-- Workers version rollback procedure
-- Preview environments with isolated D1/secrets
+### Deployment / operations
+- CI dependency audit, typecheck, and tests
+- D1 migration review and release gates
+- Production smoke tests and health checks
+- Worker-version recovery procedure
+- Isolated preview environments
 - Secret rotation procedure
-- Incident/diagnostics center
-- Observability (Logs + Traces)
+- Incident and diagnostics workflow
+- Logs and traces
 
 ### Data / D1
 - Append-only migrations
 - Expand → migrate → contract for breaking schema changes
-- Query/index review
+- Query and index review
 - Version uniqueness constraints
 - Ownership-safe queries
-- Recovery/backup runbook
+- Verified backup and restore procedure
 
 ### Subscription UX
 - Mobile-first subscription page
-- Status / expiry / config count
+- Status, expiry, and config count
 - Copy and QR actions
-- Client-aware output
-- Diagnostics without leaking sensitive data
+- Client-aware output formats
+- Diagnostics that do not leak sensitive data
 - Fast, cache-safe public delivery
 - Sakura branding and lightweight animation
 
 ### Admin UX
-- System health
-- Database health
-- Security health
+- System, database, and security health
 - Subscription health
-- Deployment status
 - Audit timeline
-- Diagnostics Center
-- Analytics
-- Incident Center
+- Diagnostics and incident center
+- Deployment status and analytics
 
-## Current implementation status
+## Implementation status
 
-Already implemented or substantially present:
-- D1 + KV Cloudflare-native architecture
-- Endpoint removal
-- RBAC/auth/session hardening
-- D1 rate limiting
-- Config generation + validation
-- Config version records
-- Subscription token hashing/rotation
-- Public subscription delivery
-- Ownership checks
-- Audit storage
-- CI/CD with D1 migrations
-- Production deployment through GitHub Actions
+The repository contains implementation for several core capabilities, including the Cloudflare Worker entry point, D1 repositories and migrations, authentication/session handling, access-control checks, rate limiting, config generation and validation, config releases, subscription token handling and delivery, audit records, diagnostics, and CI workflows.
 
-Next implementation batch:
-1. Backup/restore runbook
-2. Preview environment
-3. Final dashboard and subscription UI
+This is a source-code inventory, not a claim that every capability has passed a production acceptance test. Production deployment and live-environment verification remain separate release activities.
 
-## Important operational rule
+### Current engineering focus
 
-Do not automatically roll back application code after a failed post-deploy check when a database migration has already been applied. First use backward-compatible migrations (expand/migrate/contract), then allow safe Worker-version rollback.
+1. Improve D1 query efficiency without weakening ownership, status, or expiry checks.
+2. Expand regression tests for security boundaries and edge cases.
+3. Review schema/index alignment and migration safety.
+4. Improve repository documentation and contributor workflow.
+5. Complete a release-readiness review before any production deployment.
+
+### Later priorities
+
+- Verified backup and restore workflow
+- Isolated preview environment
+- Subscription and owner dashboard UX improvements
+- More comprehensive operational metrics and incident handling
+
+## Release invariant
+
+Do not automatically roll back application code after a failed post-deploy check if a database migration has already been applied. First design backward-compatible migrations (expand/migrate/contract), then permit a safe Worker-version rollback only when the schema remains compatible.
 
 ## Benchmarks
 
-BPB demonstrates broad client compatibility and subscription-oriented tooling. SakuraPanel should learn from those capabilities while keeping its own architecture, security model, and codebase.
-
-References used during architecture research:
-- Cloudflare Workers/D1 documentation
-- BPB Worker Panel
-- Nahan
-- EdgeTunnel
-- Current Cloudflare serverless deployment patterns
+External projects can help identify expected capabilities such as client compatibility and subscription tooling. SakuraPanel should implement its own requirements and maintain its own security model and codebase.
