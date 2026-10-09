@@ -21,9 +21,15 @@ concurrency:
 
 jobs:
   deploy:
+    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Restrict Production releases to main
+        if: ${{ github.ref != 'refs/heads/main' }}
+        run: |
+          echo "::error::Production deployment is only allowed from refs/heads/main."
+          exit 1
       - name: Require explicit Production release confirmation
         if: ${{ !inputs.confirm_production_release }}
         run: |
