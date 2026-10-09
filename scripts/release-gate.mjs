@@ -49,9 +49,23 @@ for (const path of [
   "tests/v1-systems.test.ts",
   "tests/v1-systems-api.test.ts",
   "tests/config-studio-malformed.test.ts",
-  "tests/scheduled-pulse.test.ts"
+  "tests/scheduled-pulse.test.ts",
+  "tests/server-timing.test.ts"
 ]) {
   check("required_test:" + path, existsSync(path), existsSync(path) ? "test file exists; test execution is a separate gate" : "required regression test file is missing");
+}
+
+for (const [name, path, pattern, detail] of [
+  ["config_generation_server_timing", "src/api/config-api.ts", /Server-Timing.*config_generate/, "real config generation reports server-side duration"],
+  ["subscription_provision_server_timing", "src/api/subscription-api.ts", /Server-Timing.*subscription_provision/, "real subscription provisioning reports server-side duration"],
+  ["route_candidate_schema", "migrations/0020_route_candidates.sql", /CREATE TABLE route_candidates/, "Route Advisor has a dedicated candidate model"],
+  ["route_health_sample_schema", "migrations/0021_route_health_samples.sql", /CREATE TABLE route_health_samples/, "Route Advisor has a persisted health evidence model"]
+]) {
+  try {
+    check(name, pattern.test(read(path)), detail);
+  } catch {
+    check(name, false, path + " is unavailable");
+  }
 }
 
 const blockers = checks.filter(item => item.status !== "PASS");
