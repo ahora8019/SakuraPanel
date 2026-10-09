@@ -65,6 +65,13 @@ describe("Config Studio", () => {
     expect(decoded.value.configs[0].payload.uri).toBe(uri);
   });
 
+  it("distinguishes valid configs without a supported connection URI from invalid records", () => {
+    const result = exportConfigs([config({ payload: { displayName: "generic config" } })], "links");
+    expect(result.count).toBe(0);
+    expect(result.excluded.unavailable).toBe(1);
+    expect(result.excluded.invalid).toBe(0);
+  });
+
   it("rejects malformed protocol URI fields instead of exporting them as valid configs", () => {
     const result = exportConfigs([config({ payload: { uri: "vless://not-a-uuid@example.com:443" } })], "json");
     expect(result.count).toBe(0);
