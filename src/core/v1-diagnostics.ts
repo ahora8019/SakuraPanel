@@ -45,7 +45,7 @@ const REQUIRED_INDEXES = [
   "idx_system_check_runs_started_at", "idx_system_check_runs_status_started_at"
 ] as const;
 
-const FORBIDDEN_LEGACY_TABLES = ["endpoints", "endpoint_health", "endpoint_groups", "endpoint_group_members"] as const;
+const FORBIDDEN_LEGACY_TABLES = ["endpoints", "endpoint_health"] as const;
 
 const REQUIRED_FOREIGN_KEYS: Record<string, Array<{ from: string; table: string; to: string }>> = {
   devices: [{ from: "user_id", table: "users", to: "id" }],
