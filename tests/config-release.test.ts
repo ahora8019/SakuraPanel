@@ -27,11 +27,12 @@ class MemoryReleaseRepository implements ConfigReleaseRepository {
   async list(configId: string) {
     return [...this.releases.values()].filter(r => r.configId === configId).sort((a,b) => b.version - a.version);
   }
-  async publish(configId: string, version: number, actorId: string, now: string) {
+  async publish(configId: string, version: number, actorId: string, now: string, operation: "PUBLISH" | "ROLLBACK") {
     for (const release of this.releases.values()) {
-      if (release.configId === configId && release.status === "PUBLISHED") {
-        release.status = "ROLLED_BACK";
-        release.rolledBackAt = now;
+      if (release.configId === configId && release.status === "PUBLISHED" && release.version !== version) {
+        release.status = operation === "ROLLBACK" ? "ROLLED_BACK" : "SUPERSEDED";
+        if (operation === "ROLLBACK") release.rolledBackAt = now;
+        else delete release.rolledBackAt;
       }
     }
     const key = configId + ":" + version;
@@ -59,10 +60,15 @@ describe("config release lifecycle", () => {
     const published = await service.publish("cfg-1", 2, "owner-1", "2026-01-01T00:01:00.000Z");
     expect(published.status).toBe("PUBLISHED");
     expect(published.version).toBe(2);
+    const firstRelease = await service.publish("cfg-1", 1, "owner-1", "2026-01-01T00:01:30.000Z");
+    expect(firstRelease.status).toBe("PUBLISHED");
+    expect((await service.list("cfg-1")).find(r => r.version === 2)?.status).toBe("SUPERSEDED");
 
     const rolledBack = await service.rollback("cfg-1", 1, "owner-1", "2026-01-01T00:02:00.000Z");
     expect(rolledBack.status).toBe("PUBLISHED");
     expect(rolledBack.version).toBe(1);
+    expect((await service.list("cfg-1")).find(r => r.version === 1)?.status).toBe("PUBLISHED");
+    expect((await service.list("cfg-1")).find(r => r.version === 2)?.status).toBe("ROLLED_BACK");
   });
 
   it("rejects a version that does not exist", async () => {
