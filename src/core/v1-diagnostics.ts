@@ -36,7 +36,7 @@ const REQUIRED_INDEXES = [
   "idx_configs_user_id", "idx_configs_template_id", "idx_configs_user_created_at",
   "idx_configs_device_created_at", "idx_config_versions_config_id", "idx_config_versions_config_version",
   "idx_config_releases_config_created_at", "idx_config_releases_status",
-  "idx_subscriptions_user_id", "idx_subscriptions_user_created_at",
+  "idx_subscriptions_user_id", "idx_subscriptions_user_created_at", "idx_subscriptions_public_token_hash",
   "idx_subscription_versions_subscription_id", "idx_subscription_versions_created_at",
   "idx_subscription_versions_subscription_version",
   "idx_audit_logs_actor_id", "idx_audit_logs_created_at", "idx_audit_logs_resource",
@@ -44,6 +44,16 @@ const REQUIRED_INDEXES = [
   "idx_auth_sessions_user_id", "idx_auth_sessions_expires_at", "idx_rate_limit_buckets_reset_at",
   "idx_system_check_runs_started_at", "idx_system_check_runs_status_started_at"
 ] as const;
+
+const REQUIRED_UNIQUE_KEYS: Record<string, string[][]> = {
+  users: [["username"]],
+  templates: [["name"]],
+  config_versions: [["config_id", "version"]],
+  config_releases: [["config_id", "version"]],
+  subscription_versions: [["subscription_id", "version"]],
+  subscriptions: [["public_token_hash"]],
+  system_check_runs: [["scheduled_slot"]]
+};
 
 const FORBIDDEN_LEGACY_TABLES = ["endpoints", "endpoint_health"] as const;
 
