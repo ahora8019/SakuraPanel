@@ -44,6 +44,7 @@ const REQUIRED_INDEXES = [
 ] as const;
 
 const REQUIRED_FOREIGN_KEYS: Record<string, Array<{ from: string; table: string; to: string }>> = {
+  devices: [{ from: "user_id", table: "users", to: "id" }],
   configs: [
     { from: "user_id", table: "users", to: "id" },
     { from: "device_id", table: "devices", to: "id" },
