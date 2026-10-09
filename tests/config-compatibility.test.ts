@@ -141,4 +141,36 @@ describe("config compatibility", () => {
     })).toEqual({ compatible: false, reasons: ["compatibility_features_unknown"] });
   });
 
+  it("checks minimum client version instead of claiming unsupported versions compatible", () => {
+    const versionedConfig: GeneratedConfig = {
+      ...config,
+      payload: {
+        compatibility: {
+          platform: "ANDROID",
+          protocol: "VLESS",
+          clients: ["v2rayNG"],
+          features: ["TCP"],
+          minVersion: "2.1.0"
+        }
+      }
+    };
+
+    const tooOld = evaluateCompatibilityMatrix(versionedConfig, {
+      platform: "ANDROID", protocol: "VLESS", clients: ["v2rayNG"], clientVersion: "2.0.9"
+    });
+    expect(tooOld.entries[0]?.status).toBe("incompatible");
+    expect(tooOld.entries[0]?.reasons).toContain("client_version_too_old");
+
+    const unknownVersion = evaluateCompatibilityMatrix(versionedConfig, {
+      platform: "ANDROID", protocol: "VLESS", clients: ["v2rayNG"]
+    });
+    expect(unknownVersion.entries[0]?.status).toBe("unknown");
+    expect(unknownVersion.entries[0]?.reasons).toContain("client_version_required");
+
+    const supported = evaluateCompatibilityMatrix(versionedConfig, {
+      platform: "ANDROID", protocol: "VLESS", clients: ["v2rayNG"], clientVersion: "2.1.0"
+    });
+    expect(supported.entries[0]?.status).toBe("compatible");
+  });
+
 });
