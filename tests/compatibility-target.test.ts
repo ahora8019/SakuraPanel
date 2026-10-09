@@ -54,4 +54,16 @@ describe("compatibility target query parser", () => {
     ))).toThrow("validation_failed");
   });
 
+  it("parses one valid client version and rejects malformed or duplicate versions", () => {
+    expect(parseCompatibilityTarget(new URLSearchParams(
+      "platform=ANDROID&protocol=VLESS&client=v2rayNG&clientVersion=2.4.1"
+    )).clientVersion).toBe("2.4.1");
+    expect(() => parseCompatibilityTarget(new URLSearchParams(
+      "platform=ANDROID&protocol=VLESS&client=v2rayNG&clientVersion=2.x"
+    ))).toThrow("validation_failed");
+    expect(() => parseCompatibilityTarget(new URLSearchParams(
+      "platform=ANDROID&protocol=VLESS&client=v2rayNG&clientVersion=2.0&clientVersion=3.0"
+    ))).toThrow("validation_failed");
+  });
+
 });
