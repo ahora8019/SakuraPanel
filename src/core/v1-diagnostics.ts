@@ -18,13 +18,30 @@ export interface PulseReport {
 
 const REQUIRED_COLUMNS: Record<string, string[]> = {
   users: ["id", "username", "role", "status", "security_version"],
-  configs: ["id", "user_id", "template_id", "template_version", "status", "expires_at"],
-  config_versions: ["id", "config_id", "version", "payload"],
+  devices: ["id", "user_id", "status", "created_at"],
   templates: ["id", "name", "protocol", "definition_json", "status"],
+  configs: ["id", "user_id", "template_id", "template_version", "status", "expires_at", "published_version"],
+  config_versions: ["id", "config_id", "version", "payload"],
+  config_releases: ["id", "config_id", "version", "status", "actor_id", "created_at"],
+  subscriptions: ["id", "user_id", "status", "expires_at"],
+  subscription_versions: ["id", "subscription_id", "version", "config_ids_json"],
   auth_sessions: ["id", "user_id", "token_version", "expires_at", "revoked_at"],
   audit_logs: ["id", "actor_id", "action", "resource", "created_at"],
   rate_limit_buckets: ["key", "reset_at", "count"]
 };
+
+const REQUIRED_INDEXES = [
+  "idx_devices_user_id", "idx_devices_user_status_created_at",
+  "idx_configs_user_id", "idx_configs_template_id", "idx_configs_user_created_at",
+  "idx_configs_device_created_at", "idx_config_versions_config_id", "idx_config_versions_config_version",
+  "idx_config_releases_config_created_at", "idx_config_releases_status",
+  "idx_subscriptions_user_id", "idx_subscriptions_user_created_at",
+  "idx_subscription_versions_subscription_id", "idx_subscription_versions_created_at",
+  "idx_subscription_versions_subscription_version",
+  "idx_audit_logs_actor_id", "idx_audit_logs_created_at", "idx_audit_logs_resource",
+  "idx_audit_logs_actor_created_at", "idx_audit_logs_resource_created_at",
+  "idx_auth_sessions_user_id", "idx_auth_sessions_expires_at", "idx_rate_limit_buckets_reset_at"
+] as const;
 
 export async function runPulse(env: Env): Promise<PulseReport> {
   const started = performance.now();
