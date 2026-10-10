@@ -83,6 +83,11 @@ export default {
       return ownerLabsResponse();
     }
 
+    // Static user portal preview contains sample data only; account data remains behind authenticated APIs.
+    if ((url.pathname === "/user" || url.pathname === "/user/") && request.method === "GET") {
+      return userDashboardResponse();
+    }
+
     if (!env.DB && url.pathname.startsWith("/internal/")) {
       return Response.json({ ok: false, error: "database_not_configured" }, { status: 503 });
     }
@@ -177,11 +182,6 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
 
     if (url.pathname === "/owner" && request.method === "GET") {
       return ownerDashboardResponse();
-    }
-
-    // User portal design shell; subscription values are explicitly sample-only until user auth/API wiring is complete.
-    if ((url.pathname === "/user" || url.pathname === "/user/") && request.method === "GET") {
-      return userDashboardResponse();
     }
 
     if (env.DB && (
