@@ -13,7 +13,13 @@ describe("D1 migration contract", () => {
     expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
     expect(new Set(numbers).size).toBe(numbers.length);
     expect(numbers[0]).toBe(1);
-    expect(numbers.at(-1)).toBe(19);
+    expect(numbers.at(-1)).toBe(24);
+  });
+
+  it("keeps member authentication after the existing production migration history", () => {
+    const files = readdirSync(migrationsDir).filter(name => /^\d{4}_.+\.sql$/.test(name));
+    expect(files).toContain("0023_member_auth.sql");
+    expect(files).not.toContain("0011_member_auth.sql");
   });
 
   it("contains the core tables required by the application", () => {
@@ -25,9 +31,10 @@ describe("D1 migration contract", () => {
 
     for (const table of [
       "users", "devices", "templates", "configs", "config_versions",
-      "subscriptions", "subscription_versions", "audit_logs", "auth_sessions", "system_check_runs"
+      "subscriptions", "subscription_versions", "audit_logs", "auth_sessions", "system_check_runs",
+      "route_candidates", "route_health_samples", "operation_timing_samples", "member_invites"
     ]) {
-      expect(sql).toMatch(new RegExp(`CREATE TABLE(?: IF NOT EXISTS)? ${table}\\b`));
+      expect(sql).toMatch(new RegExp("CREATE TABLE(?: IF NOT EXISTS)? " + table + "\\b"));
     }
 
     expect(sql).toContain("DROP TABLE endpoint_health");
@@ -50,7 +57,7 @@ describe("D1 migration contract", () => {
       "idx_configs_device_created_at", "idx_config_versions_config_id",
       "idx_config_versions_config_version"
     ]) {
-      expect(sql).toContain(`CREATE INDEX ${index}`);
+      expect(sql).toContain("CREATE INDEX " + index);
     }
   });
 });

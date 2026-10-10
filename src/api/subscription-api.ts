@@ -2,9 +2,10 @@ import type { SubscriptionStatus } from "../models/subscription";
 import { SubscriptionService } from "../core/subscription-service";
 import { requirePermission, type SecurityContext } from "../security/security-middleware";
 import { errorResponse } from "./error-response";
+import { recordOperationTiming } from "../core/operation-timing";
 
 export class SubscriptionApi {
-  constructor(private readonly service: SubscriptionService) {}
+  constructor(private readonly service: SubscriptionService, private readonly db?: D1Database) {}
 
   async list(context: SecurityContext | null, userId?: string): Promise<Response> {
     try {
@@ -52,13 +53,16 @@ export class SubscriptionApi {
   }
 
   async provision(context: SecurityContext | null, id: string, body: unknown): Promise<Response> {
+    const startedAt = performance.now();
     try {
       const ctx = requirePermission(context, "subscription:write");
       const subscription = await this.service.get(id);
       if (ctx.principal.role === "MEMBER" && subscription.userId !== ctx.principal.userId) throw new Error("not_found");
       if (!isProvisionBody(body)) throw new Error("validation_failed");
       const value = await this.service.provision(id, body);
-      return Response.json({ ok: true, value });
+      const durationMs = Math.max(0, performance.now() - startedAt);
+      await recordOperationTiming(this.db, "subscription_provision", durationMs);
+      return Response.json({ ok: true, value }, { headers: { "Server-Timing": `subscription_provision;dur=${durationMs.toFixed(2)}`, "Cache-Control": "no-store" } });
     } catch (error) { return errorResponse(error, statusFor(error)); }
   }
 

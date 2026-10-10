@@ -22,6 +22,7 @@ import { KvRateLimiter } from "./security/kv-rate-limit";
 import { EmergencyLock } from "./security/emergency-lock";
 import { D1SessionRepository } from "./repositories/session-repository";
 import { ownerDashboardResponse } from "./ui/owner-dashboard";
+import { userDashboardResponse } from "./ui/user-dashboard";
 import { cleanupRateLimitBuckets } from "./security/rate-limit-cleanup";
 import { runDiagnostics, runReadiness } from "./core/diagnostics";
 import { DiagnosticsApi } from "./api/diagnostics-api";
@@ -34,6 +35,8 @@ import { AuditApi } from "./api/audit-api";
 import { V1SystemsApi } from "./api/v1-systems-api";
 import { ownerLabsResponse } from "./ui/owner-labs";
 import { runScheduledPulse } from "./core/scheduled-pulse";
+import { cleanupRouteHealthSamples } from "./core/route-health-cleanup";
+import { cleanupOperationTimingSamples } from "./core/operation-timing";
 
 import type { Env } from "./types/env";
 
@@ -42,6 +45,8 @@ export default {
     if (!env.DB) return;
     await runScheduledPulse(env, _controller.scheduledTime);
     await cleanupRateLimitBuckets(env.DB);
+    await cleanupRouteHealthSamples(env.DB);
+    await cleanupOperationTimingSamples(env.DB);
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
@@ -76,6 +81,11 @@ export default {
     // Static diagnostics shell stays available during Emergency Lock; its APIs remain authenticated.
     if (request.method === "GET" && url.pathname === "/owner/labs") {
       return ownerLabsResponse();
+    }
+
+    // Static user portal preview contains sample data only; account data remains behind authenticated APIs.
+    if ((url.pathname === "/user" || url.pathname === "/user/") && request.method === "GET") {
+      return userDashboardResponse();
     }
 
     if (!env.DB && url.pathname.startsWith("/internal/")) {
@@ -378,7 +388,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     const userApi = new UserApi(userService);
     const deviceApi = new DeviceApi(deviceService);
     const templateApi = new TemplateApi(templateService);
-    const configApi = new ConfigApi(configService);
+    const configApi = new ConfigApi(configService, env.DB!);
     const configReleaseService = new ConfigReleaseService(
       configRepository,
       new D1ConfigReleaseRepository(env.DB!),
@@ -386,7 +396,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       new D1AuditRepository(env.DB!)
     );
     const configReleaseApi = new ConfigReleaseApi(configReleaseService);
-    const subscriptionApi = new SubscriptionApi(subscriptionService);
+    const subscriptionApi = new SubscriptionApi(subscriptionService, env.DB!);
     const subscriptionDiagnosticsApi = new SubscriptionDiagnosticsApi(
       new SubscriptionDiagnosticsService(subscriptionRepository, configRepository)
     );
