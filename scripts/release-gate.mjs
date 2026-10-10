@@ -36,8 +36,9 @@ try {
   const nums = files.map(file => Number(file.slice(0, 4)));
   const unique = new Set(nums).size === nums.length;
   const ordered = nums.every((num, index) => index === 0 || num > nums[index - 1]);
+  const contiguous = nums.every((num, index) => num === index + 1);
   const memberAuthVersionSafe = files.includes("0023_member_auth.sql") && !files.includes("0011_member_auth.sql");
-  check("migration_order", files.length > 0 && unique && ordered && memberAuthVersionSafe, `${files.length} migration files found; versions are unique/increasing and member auth is appended after the existing release history`);
+  check("migration_order", files.length > 0 && unique && ordered && contiguous && memberAuthVersionSafe, `${files.length} migration files found; versions must be unique, increasing, contiguous from 0001, and member auth must be appended after the existing release history`);
 } catch {
   check("migration_order", false, "migration directory is unavailable");
 }
