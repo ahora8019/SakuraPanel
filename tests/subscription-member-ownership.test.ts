@@ -31,15 +31,14 @@ describe("member subscription ownership", () => {
     expect(response.status).toBe(404);
   });
 
-  it("does not rotate another member's subscription token", async () => {
+  it("forbids members from rotating subscription access tokens", async () => {
+    const get = vi.fn(async () => subscription("s2", "member-2"));
     const rotateAccessToken = vi.fn();
-    const service = {
-      get: vi.fn(async () => subscription("s2", "member-2")),
-      rotateAccessToken
-    } as unknown as SubscriptionService;
+    const service = { get, rotateAccessToken } as unknown as SubscriptionService;
     const api = new SubscriptionApi(service);
     const response = await api.rotateToken(member, "s2");
-    expect(response.status).toBe(404);
+    expect(response.status).toBe(403);
+    expect(get).not.toHaveBeenCalled();
     expect(rotateAccessToken).not.toHaveBeenCalled();
   });
 });
