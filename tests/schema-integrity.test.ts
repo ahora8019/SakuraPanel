@@ -13,10 +13,10 @@ describe("D1 migration contract", () => {
     expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
     expect(new Set(numbers).size).toBe(numbers.length);
     expect(numbers[0]).toBe(1);
-    expect(numbers.at(-1)).toBe(22);
+    expect(numbers.at(-1)).toBe(23);
   });
 
-  it("contains the core tables required by the application", () => {
+  it("keeps member authentication after the existing production migration history", () => {\n    const files = readdirSync(migrationsDir).filter(name => /^\\d{4}_.+\\.sql$/.test(name));\n    expect(files).toContain("0023_member_auth.sql");\n    expect(files).not.toContain("0011_member_auth.sql");\n  });\n\n  it("contains the core tables required by the application", () => {
     const sql = readdirSync(migrationsDir)
       .filter(name => /^\d{4}_.+\.sql$/.test(name))
       .sort()
@@ -25,7 +25,7 @@ describe("D1 migration contract", () => {
 
     for (const table of [
       "users", "devices", "templates", "configs", "config_versions",
-      "subscriptions", "subscription_versions", "audit_logs", "auth_sessions", "system_check_runs", "route_candidates", "route_health_samples", "operation_timing_samples"
+      "subscriptions", "subscription_versions", "audit_logs", "auth_sessions", "system_check_runs", "route_candidates", "route_health_samples", "operation_timing_samples", "member_invites"
     ]) {
       expect(sql).toMatch(new RegExp(`CREATE TABLE(?: IF NOT EXISTS)? ${table}\\b`));
     }
