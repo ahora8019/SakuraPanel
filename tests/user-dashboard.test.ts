@@ -21,12 +21,12 @@ describe("user dashboard preview", () => {
     expect(html).toContain('value="fa"');
     expect(html).toContain('value="ja"');
     expect(html).toContain('value="ru"');
-    expect(html).toContain("example data");
+    expect(html).toContain("Sample data");
   });
 
   it("does not pretend the sample subscription link is real or call clipboard APIs", async () => {
     const html = await (await userDashboardResponse()).text();
-    expect(html).toContain("no real subscription link");
+    expect(html).toContain("Preview: no real link to copy");
     expect(html).not.toContain("navigator.clipboard");
     expect(html).not.toContain("clipboard.writeText");
     expect(html).not.toContain("fetch(");
