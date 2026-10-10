@@ -13,7 +13,7 @@ describe("D1 migration contract", () => {
     expect(numbers).toEqual([...numbers].sort((a, b) => a - b));
     expect(new Set(numbers).size).toBe(numbers.length);
     expect(numbers[0]).toBe(1);
-    expect(numbers.at(-1)).toBe(23);
+    expect(numbers.at(-1)).toBe(24);
   });
 
   it("keeps member authentication after the existing production migration history", () => {
