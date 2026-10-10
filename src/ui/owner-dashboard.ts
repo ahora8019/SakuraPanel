@@ -1,5 +1,5 @@
 export function ownerDashboardResponse(): Response {
-  const html = String.raw\`<!doctype html>
+  const html = String.raw`<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -185,6 +185,6 @@ $("provisionForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.
 $("rebuildForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);if(!confirm("Rebuild this subscription now?"))return;try{await api("/internal/subscriptions/"+encodeURIComponent(f.get("subscriptionId"))+"/rebuild",{method:"POST"});toast("Subscription rebuild requested.");await load()}catch(x){toast(String(x),true)}};
 const initialPage=location.hash.slice(1);if(pageNames[initialPage])goto(initialPage);load();
 </script>
-</body></html>\`;
+</body></html>`;
   return new Response(html, { headers: { "content-type": "text/html; charset=UTF-8", "cache-control": "no-store", "x-content-type-options": "nosniff" } });
 }
