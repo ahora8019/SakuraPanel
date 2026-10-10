@@ -4,7 +4,7 @@ import { hashPassword, verifyPassword } from "../src/security/password-credentia
 describe("password credential helpers", () => {
   it("stores only a salted, versioned PBKDF2 credential", async () => {
     const encoded = await hashPassword("correct-horse-battery");
-    expect(encoded).toMatch(/^pbkdf2-sha256\\$v1\\$310000\\$[A-Za-z0-9_-]+\\$[A-Za-z0-9_-]+$/);
+    expect(encoded).toMatch(/^pbkdf2-sha256\$v1\$310000\$[A-Za-z0-9_-]+\$[A-Za-z0-9_-]+$/);
     expect(encoded).not.toContain("correct-horse-battery");
     expect(await verifyPassword("correct-horse-battery", encoded)).toBe(true);
   });
