@@ -5,6 +5,10 @@ export interface DeviceRepository {
   listByUserId(userId: string): Promise<Device[]>;
   countActiveByUserId(userId: string): Promise<number>;
   create(device: Device): Promise<void>;
+  /** Atomically enforces the active-device cap when inserting. */
+  createIfBelowActiveLimit?(device: Device, limit: number): Promise<boolean>;
+  /** Atomically enforces the active-device cap when reactivating a device. */
+  activateIfBelowActiveLimit?(id: string, userId: string, limit: number, updatedAt: string): Promise<boolean>;
   updateStatus(id: string, status: DeviceStatus, updatedAt: string): Promise<void>;
 }
 
@@ -32,6 +36,27 @@ export class D1DeviceRepository implements DeviceRepository {
       VALUES (?, ?, ?, ?, ?, ?, ?)`)
       .bind(device.id, device.userId, device.name, device.deviceType ?? null, device.status, device.createdAt, device.updatedAt)
       .run();
+  }
+
+  async createIfBelowActiveLimit(device: Device, limit: number): Promise<boolean> {
+    const result = await this.db.prepare(`INSERT INTO devices
+      (id, user_id, name, device_type, status, created_at, updated_at)
+      SELECT ?, ?, ?, ?, ?, ?, ?
+      WHERE (SELECT COUNT(*) FROM devices WHERE user_id = ? AND status = 'ACTIVE') < ?`)
+      .bind(device.id, device.userId, device.name, device.deviceType ?? null, device.status,
+        device.createdAt, device.updatedAt, device.userId, limit)
+      .run();
+    return Number(result.meta.changes ?? 0) > 0;
+  }
+
+  async activateIfBelowActiveLimit(id: string, userId: string, limit: number, updatedAt: string): Promise<boolean> {
+    const result = await this.db.prepare(`UPDATE devices
+      SET status = 'ACTIVE', updated_at = ?
+      WHERE id = ? AND user_id = ? AND status <> 'ACTIVE'
+        AND (SELECT COUNT(*) FROM devices WHERE user_id = ? AND status = 'ACTIVE') < ?`)
+      .bind(updatedAt, id, userId, userId, limit)
+      .run();
+    return Number(result.meta.changes ?? 0) > 0;
   }
 
   async updateStatus(id: string, status: DeviceStatus, updatedAt: string): Promise<void> {

@@ -3,7 +3,7 @@ import type { AuditAction } from "../security/audit";
 import type { D1AuditRepository } from "../repositories/audit-repository";
 
 const ACTIONS: readonly AuditAction[] = [
-  "CREATE", "UPDATE", "DELETE", "LOGIN", "REVOKE", "ADMIN_ACTION", "SECURITY_EVENT"
+  "CREATE", "UPDATE", "DELETE", "LOGIN", "REVOKE", "ADMIN_ACTION", "SECURITY_EVENT", "PUBLISH", "ROLLBACK"
 ];
 
 export class AuditApi {

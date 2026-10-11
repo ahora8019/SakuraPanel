@@ -3,17 +3,20 @@
 ## Release gate
 
 1. CI must pass: dependency audit, typecheck, tests.
-2. Verify the target Worker, D1 database, required `SECURITY_KV`, and secret names before any operation.
-3. Apply D1 migrations before Worker deployment, and only after confirming the target database.
-4. Prefer additive migrations and expand/migrate/contract for breaking changes.
-5. Never assume a Worker rollback reverses a D1 migration.
-6. After deployment, check `/health` and `/ready`. Readiness must report both database and security control as healthy.
-7. Run `scripts/smoke-test.mjs` against the exact deployed URL.
-8. Inspect Workers Logs and Traces for request IDs and error spikes without logging credential values.
+2. Apply D1 migrations before Worker deployment.
+3. Prefer additive migrations and expand/migrate/contract for breaking changes.
+4. Never assume a Worker rollback reverses a D1 migration.
+5. After deployment, check `/health`, `/ready`, and the authenticated diagnostics endpoint.
+6. Readiness must show healthy D1, `AUTH_SECRET`, `BOOTSTRAP_SECRET`, and `SECURITY_KV`. A missing emergency-lock binding is a failed release gate.
+7. Inspect Workers Logs and Traces for request IDs and error spikes.
 
-## Backup requirements
+## Security controls
 
-Follow `docs/backup-restore-drill.md` to create a real D1 SQL export. A bookmark or a successful export request alone is not a verified backup. Record the export checksum, securely retain the encrypted artifact outside Git, and periodically verify it by restoring into a separate D1 database.
+- Keep `AUTH_SECRET` and `BOOTSTRAP_SECRET` as Wrangler secrets; each must be at least 32 characters.
+- Cookie-authenticated mutations require an exact same-origin `Origin` header. Investigate unexpected `csrf_rejected` responses instead of weakening the check.
+- Mutation request bodies are capped at 1 MiB. Keep config/template payloads below that limit.
+- The owner dashboard uses a restrictive Content Security Policy, frame denial, no-store caching, and MIME-sniffing protection.
+- D1-backed atomic rate limiting must remain enabled for internal routes, public subscriptions, and authentication/bootstrap endpoints.
 
 ## Recovery order
 
@@ -27,16 +30,28 @@ Stop the rollout. Do not automatically deploy an older Worker. Inspect migration
 
 ### Data corruption
 
-Treat D1 data restoration as a separate incident. Restore only from an explicitly verified backup/export and reconcile application/schema versions before reopening traffic. Never restore over production as a test.
+Treat D1 data restoration as a separate incident. Restore only from an explicitly verified backup/export and reconcile application/schema versions before reopening traffic.
 
 ## Secret rotation
 
-Rotate Cloudflare API credentials and Worker secrets independently. Never put secrets in Telegram commands, workflow inputs, source files, logs, URLs, or client responses. After rotation, perform a deployment smoke test and verify authenticated flows.
+Rotate Cloudflare API credentials and Worker secrets independently. Never put secrets in Telegram commands, workflow inputs, source files, logs, URLs, or client responses.
 
-## Preview environment
+- After rotating `AUTH_SECRET`, verify that old signed tokens fail authentication.
+- After rotating `BOOTSTRAP_SECRET`, verify the owner login flow and readiness.
+- If any session token may have been exposed, invalidate all existing sessions by incrementing each user's `security_version` in D1, then verify the affected sessions no longer authenticate.
+- After every rotation, deploy and verify `/health`, `/ready`, owner login, logout, CSRF rejection, and rate limiting.
 
-Preview must use a dedicated D1 database, a dedicated `SECURITY_KV` namespace, and separate `AUTH_SECRET` and `BOOTSTRAP_SECRET` values. See `docs/preview-environment.md`. Do not point preview at production resources.
+## Public subscription incident
 
-## Release evidence
+1. Rotate the affected subscription token.
+2. Confirm the old token no longer resolves.
+3. Check rate-limit and request logs for the affected window.
+4. Review audit records for administrative changes.
+5. Do not log or paste the raw subscription token into incident notes.
 
-Record the source commit, CI run, deployment/version identifier, smoke-test output, readiness result, backup/restore drill evidence, and reviewer. If a step was not actually run, label it `NOT RUN`; do not infer success from configuration alone.
+## Operational principles
+
+- Keep public responses cache-safe and free of internal secrets.
+- Keep readiness checks cheap; deep schema/foreign-key diagnostics are for controlled operational checks.
+- Preserve migration history. Do not rewrite applied migrations.
+- No Endpoint/VPS dependency exists in the current edition.
