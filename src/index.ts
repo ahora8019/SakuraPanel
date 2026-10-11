@@ -64,7 +64,7 @@ export default {
     const url = new URL(request.url);
 
     if (!isCookieMutationSameOrigin(request)) {
-      return Response.json({ ok: false, error: "origin_not_allowed" }, { status: 403, headers: { "cache-control": "no-store" } });
+      return Response.json({ ok: false, error: "csrf_rejected" }, { status: 403, headers: { "cache-control": "no-store" } });
     }
     try {
       const limitedRequest = await limitRequestBody(request);
@@ -204,7 +204,14 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     }
 
     if (url.pathname === "/owner" && request.method === "GET") {
-      return ownerDashboardResponse();
+      const response = ownerDashboardResponse();
+      response.headers.set("content-security-policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'");
+      response.headers.set("x-frame-options", "DENY");
+      response.headers.set("x-content-type-options", "nosniff");
+      response.headers.set("referrer-policy", "strict-origin-when-cross-origin");
+      response.headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
+      response.headers.set("cache-control", "no-store");
+      return response;
     }
 
     if (env.DB && (
