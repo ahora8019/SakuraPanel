@@ -98,7 +98,7 @@ jobs:
             compatibility_date: "2026-10-06",
             workers_dev: true,
             observability: { enabled: true, logs: { enabled: true, head_sampling_rate: 1 }, traces: { enabled: true, head_sampling_rate: 0.1 } },
-            d1_databases: [{ binding: "DB", database_name: "sakurapanel-preview", database_id: process.env.PREVIEW_D1_DATABASE_ID, migrations_dir: "migrations" }],
+            d1_databases: [{ binding: "DB", database_name: "sakurapanel-preview-db", database_id: process.env.PREVIEW_D1_DATABASE_ID, migrations_dir: "migrations" }],
             kv_namespaces: [{ binding: "SECURITY_KV", id: process.env.PREVIEW_SECURITY_KV_ID }]
           };
           writeFileSync("wrangler.preview.jsonc", JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
