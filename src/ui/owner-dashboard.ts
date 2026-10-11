@@ -186,5 +186,5 @@ $("rebuildForm").onsubmit=async e=>{e.preventDefault();const f=new FormData(e.ta
 const initialPage=location.hash.slice(1);if(pageNames[initialPage])goto(initialPage);load();
 </script>
 </body></html>`;
-  return new Response(html, { headers: { "content-type": "text/html; charset=UTF-8", "cache-control": "no-store", "x-content-type-options": "nosniff" } });
+  return new Response(html, { headers: { "content-type": "text/html; charset=UTF-8", "cache-control": "no-store", "x-content-type-options": "nosniff", "x-frame-options": "DENY", "referrer-policy": "strict-origin-when-cross-origin", "permissions-policy": "camera=(), microphone=(), geolocation=()", "content-security-policy": "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'" } });
 }
