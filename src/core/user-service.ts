@@ -29,6 +29,9 @@ export class UserService {
     if (!isRole(actorRole) || !["ACTIVE", "SUSPENDED", "DISABLED"].includes(status)) throw new Error("validation_failed");
     if (actorRole !== "OWNER" && roleRank(actorRole) <= roleRank(current.role)) throw new Error("forbidden");
     if (current.role === "OWNER" && current.status === "ACTIVE" && status !== "ACTIVE") {
+      // Repositories that enforce a single-owner invariant may not expose a
+      // count method; fail closed rather than risk locking out the installation.
+      if (typeof this.users.countActiveOwners !== "function") throw new Error("owner_status_protected");
       if (await this.users.countActiveOwners() <= 1) throw new Error("last_active_owner");
     }
     const changed = await this.users.updateStatus(id, status, now);
