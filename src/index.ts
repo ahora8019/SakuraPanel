@@ -472,7 +472,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       return configGeneratorApi.generate(context, body);
     }
 
-    const configCompatibilityMatch = url.pathname.match(/^\\/internal\\/configs\\/([^/]+)\\/compatibility$/);
+    const configCompatibilityMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/compatibility$/);
     if (configCompatibilityMatch && request.method === "GET") {
       return configCompatibilityApi.get(context, decodePathSegment(configCompatibilityMatch[1]), url.searchParams);
     }
