@@ -30,5 +30,27 @@
       "binding": "SECURITY_KV",
       "id": "fdc01356fa8d48a8bbd375edc113441a"
     }
-  ]
+  ],
+  "env": {
+    "preview": {
+      "name": "sakurapanel-preview",
+      "triggers": {
+        "crons": ["0 * * * *"]
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "sakurapanel-preview-db",
+          "database_id": "6c6916e8-37b3-4d2c-bd9b-2de0015fb904",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "SECURITY_KV",
+          "id": "1d211a09497940c286a3941182e8fe7d"
+        }
+      ]
+    }
+  }
 }
