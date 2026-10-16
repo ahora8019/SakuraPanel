@@ -13,8 +13,9 @@ export class SubscriptionService {
     private readonly users?: UserRepository
   ) {}
 
-  async create(userId: string, expiresAt?: string, now = new Date().toISOString()): Promise<{ subscription: Subscription; accessToken: string }> {
-    if (!userId) throw new Error("validation_failed");
+  async create(userId: string, expiresAt?: string, now = new Date().toISOString(), name = "Subscription"): Promise<{ subscription: Subscription; accessToken: string }> {
+    const normalizedName = name.trim();
+    if (!userId || !normalizedName || normalizedName.length > 64) throw new Error("validation_failed");
     if (this.users) {
       const user = await this.users.findById(userId);
       if (!user || user.status !== "ACTIVE") throw new Error("user_not_active");
@@ -32,6 +33,7 @@ export class SubscriptionService {
     const subscription: Subscription = {
       id: crypto.randomUUID(),
       userId,
+      name: normalizedName,
       status: "ACTIVE",
       ...(expiresAt ? { expiresAt } : {}),
       publicTokenHash,
@@ -48,8 +50,11 @@ export class SubscriptionService {
     if (subscription.status !== "ACTIVE") throw new Error("subscription_not_active");
     const nowMs = Date.parse(now);
     if (Number.isNaN(nowMs)) throw new Error("invalid_timestamp");
-    if (subscription.expiresAt && Date.parse(subscription.expiresAt) <= nowMs) {
-      throw new Error("subscription_expired");
+    if (subscription.expiresAt) {
+      const expiresMs = Date.parse(subscription.expiresAt);
+      if (!Number.isFinite(expiresMs) || expiresMs <= nowMs) {
+        throw new Error("subscription_expired");
+      }
     }
 
     const accessToken = generateSubscriptionToken();
@@ -126,6 +131,7 @@ export class SubscriptionService {
 
     const latest = await this.repository.getLatestVersion(subscriptionId);
     if (!latest || latest.configIds.length === 0) throw new Error("no_eligible_configs");
+    if (latest.configIds.length > 100) throw new Error("validation_failed");
 
     const available: string[] = [];
     for (const configId of latest.configIds) {
@@ -166,6 +172,25 @@ export class SubscriptionService {
     throw new Error("version_conflict");
   }
 
+  async recordGeneratedConfigs(
+    subscriptionId: string,
+    configIds: string[],
+    now = new Date().toISOString()
+  ): Promise<SubscriptionVersion> {
+    if (configIds.length < 1 || configIds.length > 100 || new Set(configIds).size !== configIds.length) {
+      throw new Error("validation_failed");
+    }
+    const subscription = await this.get(subscriptionId);
+    if (subscription.status !== "ACTIVE") throw new Error("subscription_not_active");
+    const nowMs = Date.parse(now);
+    if (!Number.isFinite(nowMs)) throw new Error("invalid_timestamp");
+    if (subscription.expiresAt) {
+      const expiresMs = Date.parse(subscription.expiresAt);
+      if (!Number.isFinite(expiresMs) || expiresMs <= nowMs) throw new Error("subscription_expired");
+    }
+    return this.saveNextVersion(subscriptionId, configIds, now);
+  }
+
   async getLatestVersion(subscriptionId: string): Promise<SubscriptionVersion | null> {
     return this.repository.getLatestVersion(subscriptionId);
   }
@@ -176,7 +201,28 @@ export class SubscriptionService {
     now = new Date().toISOString()
   ): Promise<Subscription> {
     if (!["ACTIVE", "EXPIRED", "REVOKED"].includes(status)) throw new Error("validation_failed");
-    if (!(await this.repository.updateStatus(id, status, now))) throw new Error("subscription_not_found");
+    const nowMs = Date.parse(now);
+    if (!Number.isFinite(nowMs)) throw new Error("invalid_timestamp");
+    const current = await this.get(id);
+    // Revocation is terminal: reactivating the same record would revive an old
+    // bearer token that may have been revoked after compromise.
+    if (current.status === "REVOKED" && status !== "REVOKED") {
+      throw new Error("subscription_revoked_terminal");
+    }
+    if (status === "ACTIVE" && current.expiresAt) {
+      const expiresMs = Date.parse(current.expiresAt);
+      if (!Number.isFinite(expiresMs) || expiresMs <= nowMs) {
+        throw new Error("subscription_expired");
+      }
+    }
+    if (!(await this.repository.updateStatus(id, status, now))) {
+      const latest = await this.repository.findById(id);
+      if (!latest) throw new Error("subscription_not_found");
+      if (latest.status === "REVOKED" && status !== "REVOKED") {
+        throw new Error("subscription_revoked_terminal");
+      }
+      throw new Error("subscription_not_found");
+    }
     return this.get(id);
   }
 }

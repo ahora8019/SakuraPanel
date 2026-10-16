@@ -2,9 +2,10 @@ import type { ConfigStatus } from "../models/config";
 import { ConfigService } from "../core/config-service";
 import { requirePermission, type SecurityContext } from "../security/security-middleware";
 import { errorResponse } from "./error-response";
+import { recordOperationTiming } from "../core/operation-timing";
 
 export class ConfigApi {
-  constructor(private readonly service: ConfigService) {}
+  constructor(private readonly service: ConfigService, private readonly db?: D1Database) {}
 
   async get(context: SecurityContext | null, id: string): Promise<Response> {
     try {
@@ -24,6 +25,7 @@ export class ConfigApi {
   }
 
   async generate(context: SecurityContext | null, body: unknown): Promise<Response> {
+    const startedAt = performance.now();
     try {
       const ctx = requirePermission(context, "config:write");
       if (!isGenerateBody(body)) throw new Error("validation_failed");
@@ -34,7 +36,9 @@ export class ConfigApi {
         expiresAt: body.expiresAt,
         now: new Date().toISOString()
       });
-      return Response.json({ ok: true, value }, { status: 201 });
+      const durationMs = Math.max(0, performance.now() - startedAt);
+      await recordOperationTiming(this.db, "config_generate", durationMs);
+      return Response.json({ ok: true, value }, { status: 201, headers: { "Server-Timing": `config_generate;dur=${durationMs.toFixed(2)}`, "Cache-Control": "no-store" } });
     } catch (error) { return errorResponse(error, statusFor(error)); }
   }
 

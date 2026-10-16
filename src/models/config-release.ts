@@ -1,6 +1,6 @@
 import type { ID, ISODateString } from "../types/common";
 
-export type ConfigReleaseStatus = "DRAFT" | "PUBLISHED" | "ROLLED_BACK";
+export type ConfigReleaseStatus = "DRAFT" | "PUBLISHED" | "SUPERSEDED" | "ROLLED_BACK";
 
 export interface ConfigRelease {
   id: ID;

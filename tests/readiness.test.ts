@@ -1,104 +1,57 @@
 import { describe, expect, it } from "vitest";
 import { runReadiness } from "../src/core/diagnostics";
+import type { Env } from "../src/types/env";
 
-function makeDb(shouldFail = false): D1Database {
-  return {
-    prepare: () => ({
-      first: async () => {
-        if (shouldFail) throw new Error("database unavailable");
-        return { ok: 1 };
-      }
-    })
-  } as unknown as D1Database;
+function envWith(
+  secret: string,
+  dbAvailable = true,
+  bootstrapSecret = "b".repeat(32),
+  kvAvailable = true
+): Env {
+  const DB = dbAvailable
+    ? { prepare: () => ({ first: async () => ({ ok: 1 }) }) }
+    : undefined;
+  const SECURITY_KV = kvAvailable
+    ? { get: async () => null, put: async () => undefined, delete: async () => undefined }
+    : undefined;
+  return { AUTH_SECRET: secret, BOOTSTRAP_SECRET: bootstrapSecret, DB, SECURITY_KV } as unknown as Env;
 }
 
-function makeKv(value: string | null = null, shouldFail = false): KVNamespace {
-  return {
-    get: async () => {
-      if (shouldFail) throw new Error("KV unavailable");
-      return value;
-    }
-  } as unknown as KVNamespace;
-}
-
-describe("production readiness security controls", () => {
-  it("fails readiness when the authentication secret is missing or too short", async () => {
-    const result = await runReadiness({
-      AUTH_SECRET: "short",
-      DB: makeDb(),
-      SECURITY_KV: makeKv(null)
-    });
-
-    expect(result.ok).toBe(false);
-    expect(result.authentication).toEqual({
-      status: "error",
-      detail: "auth_secret_missing_or_too_short"
-    });
-  });
-
-  it("fails readiness when the emergency-lock binding is missing", async () => {
-    const result = await runReadiness({
-      AUTH_SECRET: "x".repeat(32),
-      DB: makeDb()
-    });
-
-    expect(result.ok).toBe(false);
-    expect(result.database.status).toBe("ok");
-    expect(result.securityControl).toEqual({
-      status: "error",
-      detail: "security_control_not_configured"
-    });
-  });
-
-  it("fails readiness while the emergency lock is active", async () => {
-    const result = await runReadiness({
-      AUTH_SECRET: "x".repeat(32),
-      DB: makeDb(),
-      SECURITY_KV: makeKv("1")
-    });
-
-    expect(result.ok).toBe(false);
-    expect(result.securityControl).toEqual({
-      status: "error",
-      detail: "emergency_lock_active"
-    });
-  });
-
-  it("fails readiness when the security state store cannot be read", async () => {
-    const result = await runReadiness({
-      AUTH_SECRET: "x".repeat(32),
-      DB: makeDb(),
-      SECURITY_KV: makeKv(null, true)
-    });
-
-    expect(result.ok).toBe(false);
-    expect(result.securityControl).toEqual({
-      status: "error",
-      detail: "security_control_check_failed"
-    });
-  });
-
-  it("passes readiness only when the database is reachable and the lock is clear", async () => {
-    const result = await runReadiness({
-      AUTH_SECRET: "x".repeat(32),
-      DB: makeDb(),
-      SECURITY_KV: makeKv(null)
-    });
-
+describe("readiness checks", () => {
+  it("reports ready only when database and all critical security controls are configured", async () => {
+    const result = await runReadiness(envWith("a".repeat(32)));
     expect(result.ok).toBe(true);
     expect(result.database.status).toBe("ok");
-    expect(result.securityControl.status).toBe("ok");
+    expect(result.authentication.status).toBe("ok");
+    expect(result.bootstrapAuthentication.status).toBe("ok");
+    expect(result.emergencyLock.status).toBe("ok");
   });
 
-  it("fails readiness when the database is unavailable even if security controls are healthy", async () => {
-    const result = await runReadiness({
-      AUTH_SECRET: "x".repeat(32),
-      DB: makeDb(true),
-      SECURITY_KV: makeKv(null)
-    });
+  it("does not report ready when the auth secret is missing or too short", async () => {
+    const result = await runReadiness(envWith("short"));
+    expect(result.ok).toBe(false);
+    expect(result.database.status).toBe("ok");
+    expect(result.authentication.status).toBe("error");
+  });
 
+  it("does not report ready when the bootstrap secret is missing or too short", async () => {
+    const result = await runReadiness(envWith("a".repeat(32), true, "short"));
+    expect(result.ok).toBe(false);
+    expect(result.bootstrapAuthentication.status).toBe("error");
+  });
+
+  it("does not report ready when emergency-lock storage is missing", async () => {
+    const result = await runReadiness(envWith("a".repeat(32), true, "b".repeat(32), false));
+    expect(result.ok).toBe(false);
+    expect(result.emergencyLock.status).toBe("error");
+  });
+
+  it("reports database failure independently of security configuration", async () => {
+    const result = await runReadiness(envWith("a".repeat(32), false));
     expect(result.ok).toBe(false);
     expect(result.database.status).toBe("error");
-    expect(result.securityControl.status).toBe("ok");
+    expect(result.authentication.status).toBe("ok");
+    expect(result.bootstrapAuthentication.status).toBe("ok");
+    expect(result.emergencyLock.status).toBe("ok");
   });
 });

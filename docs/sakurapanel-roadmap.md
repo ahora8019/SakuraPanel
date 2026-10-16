@@ -2,35 +2,100 @@
 
 ## Product principles
 
-SakuraPanel is a Cloudflare-native panel, not a clone of BPB, Nahan, Zeus, or EdgeTunnel. Priorities are security, stability, performance, compatibility, maintainability, then visual polish. The current edition does not require external VPS endpoints.
+SakuraPanel is an independent Cloudflare-native project. Other projects may be used as functional benchmarks, not as code or identity to copy.
 
-## Implemented in source (must still be verified against the deployed revision)
+Priorities, in order:
 
-- D1-backed users, devices, templates, configs, subscriptions, sessions, audit logs, and rate limiting.
-- Config generation, validation, versioning, release tracking, and subscription delivery.
-- Role/permission policy for OWNER, ADMIN, and MEMBER.
-- Session validation, token expiry, security-version invalidation, and audit-field redaction.
-- Emergency Lock that fails closed when its required KV binding is absent or unavailable.
-- Health and readiness endpoints; readiness includes database and security-control checks.
-- CI dependency audit, typecheck, and test steps.
-- Manual-only production deployment workflow with pre-deploy audit/typecheck/tests and a post-deploy smoke test.
+1. Security
+2. Stability
+3. Performance
+4. Compatibility
+5. Maintainability
+6. UX and visual polish
 
-## v1.0.0 release gates
+The current edition does not require a separately managed VPS or endpoint service.
 
-1. **CI:** current `main` commit passes dependency audit, typecheck, and full tests.
-2. **RBAC/Owner:** endpoint-by-endpoint role matrix and cross-user ownership regression tests; verify no MEMBER can access another user's resources or grant privileges.
-3. **Backup/restore:** create a real export, retain it securely outside Git, restore it to an isolated D1 database, and verify schema/integrity/counts.
-4. **Preview:** deploy an isolated preview Worker with its own D1 database, KV namespace, and independent secrets.
-5. **Production:** verify deployed revision and bindings, run smoke tests, verify `/ready` reports both database and security control healthy, and test authenticated owner flows.
-6. **UI:** complete and test mobile-first owner dashboard and subscription experience, including loading/error/empty states, keyboard access, and responsive layout.
-7. **Release:** tag `v1.0.0` only after all gates have recorded PASS evidence.
+## Capability areas
 
-## Remaining work
+### Core / backend
+- Config validation and template-based generation
+- Config versioning, release publishing, and rollback
+- Subscription delivery hardening and token lifecycle
+- Subscription diagnostics and integrity checks
+- Client compatibility metadata and evaluation
+- Request IDs, structured logs, health/readiness checks
+- Audit timeline and role-based access control
+- Backup/restore procedures and published-version isolation
 
-- Complete the full RBAC and ownership audit; current unit tests are not sufficient for a complete route-level certification.
-- Define and test behavior for missing client-IP headers and D1 rate-limit storage failures.
-- Review request-body limits, content-type validation, path decoding, response security headers, and cache policy route by route.
-- Build and validate the preview environment without production credentials or data.
-- Perform a real backup and isolated restore drill.
-- Finish the UI and run authenticated end-to-end tests.
-- Verify the deployed Worker is updated to the current repository commit; a live readiness response without `checks.securityControl` indicates an older deployment.
+### Security
+- RBAC and ownership isolation
+- Token hashing and rotation
+- Rate limiting and abuse detection
+- Emergency lock
+- Security-version invalidation
+- Security headers and request hardening
+- Fail-closed subscription delivery
+- Audit events for security-sensitive mutations
+
+### Deployment / operations
+- CI dependency audit, typecheck, and tests
+- D1 migration review and release gates
+- Production smoke tests and health checks
+- Worker-version recovery procedure
+- Isolated preview environments
+- Secret rotation procedure
+- Incident and diagnostics workflow
+- Logs and traces
+
+### Data / D1
+- Append-only migrations
+- Expand → migrate → contract for breaking schema changes
+- Query and index review
+- Version uniqueness constraints
+- Ownership-safe queries
+- Verified backup and restore procedure
+
+### Subscription UX
+- Mobile-first subscription page
+- Status, expiry, and config count
+- Copy and QR actions
+- Client-aware output formats
+- Diagnostics that do not leak sensitive data
+- Fast, cache-safe public delivery
+- Sakura branding and lightweight animation
+
+### Admin UX
+- System, database, and security health
+- Subscription health
+- Audit timeline
+- Diagnostics and incident center
+- Deployment status and analytics
+
+## Implementation status
+
+The repository contains implementation for several core capabilities, including the Cloudflare Worker entry point, D1 repositories and migrations, authentication/session handling, access-control checks, rate limiting, config generation and validation, config releases, subscription token handling and delivery, audit records, diagnostics, and CI workflows.
+
+This is a source-code inventory, not a claim that every capability has passed a production acceptance test. Production deployment and live-environment verification remain separate release activities.
+
+### Current engineering focus
+
+1. Improve D1 query efficiency without weakening ownership, status, or expiry checks.
+2. Expand regression tests for security boundaries and edge cases.
+3. Review schema/index alignment and migration safety.
+4. Improve repository documentation and contributor workflow.
+5. Complete a release-readiness review before any production deployment.
+
+### Later priorities
+
+- Verified backup and restore workflow
+- Isolated preview environment
+- Subscription and owner dashboard UX improvements
+- More comprehensive operational metrics and incident handling
+
+## Release invariant
+
+Do not automatically roll back application code after a failed post-deploy check if a database migration has already been applied. First design backward-compatible migrations (expand/migrate/contract), then permit a safe Worker-version rollback only when the schema remains compatible.
+
+## Benchmarks
+
+External projects can help identify expected capabilities such as client compatibility and subscription tooling. SakuraPanel should implement its own requirements and maintain its own security model and codebase.

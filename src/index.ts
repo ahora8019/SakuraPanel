@@ -3,6 +3,8 @@ import { authenticateRequest } from "./security/security-middleware";
 import { UserApi } from "./api/user-api";
 import { DeviceApi } from "./api/device-api";
 import { ConfigApi } from "./api/config-api";
+import { ConfigGeneratorApi } from "./api/config-generator-api";
+import { ConfigCompatibilityApi } from "./api/config-compatibility-api";
 import { ConfigReleaseApi } from "./api/config-release-api";
 import { ConfigService } from "./core/config-service";
 import { D1ConfigRepository } from "./repositories/config-repository";
@@ -14,7 +16,7 @@ import { DeviceService } from "./core/device-service";
 import { D1UserRepository } from "./repositories/user-repository";
 import { D1DeviceRepository } from "./repositories/device-repository";
 import { SubscriptionApi } from "./api/subscription-api";
-import { PublicSubscriptionApi } from "./api/public-subscription-api";
+import { PublicSubscriptionApi, publicSubscriptionErrorResponse } from "./api/public-subscription-api";
 import { SubscriptionDeliveryService } from "./core/subscription-delivery";
 import { SubscriptionService } from "./core/subscription-service";
 import { D1SubscriptionRepository } from "./repositories/subscription-repository";
@@ -22,6 +24,7 @@ import { KvRateLimiter } from "./security/kv-rate-limit";
 import { EmergencyLock } from "./security/emergency-lock";
 import { D1SessionRepository } from "./repositories/session-repository";
 import { ownerDashboardResponse } from "./ui/owner-dashboard";
+import { userDashboardResponse } from "./ui/user-dashboard";
 import { cleanupRateLimitBuckets } from "./security/rate-limit-cleanup";
 import { runDiagnostics, runReadiness } from "./core/diagnostics";
 import { DiagnosticsApi } from "./api/diagnostics-api";
@@ -34,18 +37,42 @@ import { AuditApi } from "./api/audit-api";
 import { V1SystemsApi } from "./api/v1-systems-api";
 import { ownerLabsResponse } from "./ui/owner-labs";
 import { runScheduledPulse } from "./core/scheduled-pulse";
+import { cleanupRouteHealthSamples } from "./core/route-health-cleanup";
+import { cleanupOperationTimingSamples } from "./core/operation-timing";
+import { isCookieMutationSameOrigin, limitRequestBody } from "./security/request-hardening";
 
 import type { Env } from "./types/env";
+
+export function decodePathSegment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return "";
+  }
+}
 
 export default {
   async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
     if (!env.DB) return;
     await runScheduledPulse(env, _controller.scheduledTime);
     await cleanupRateLimitBuckets(env.DB);
+    await cleanupRouteHealthSamples(env.DB);
+    await cleanupOperationTimingSamples(env.DB);
   },
 
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+
+    if (!isCookieMutationSameOrigin(request)) {
+      return Response.json({ ok: false, error: "csrf_rejected" }, { status: 403, headers: { "cache-control": "no-store" } });
+    }
+    try {
+      const limitedRequest = await limitRequestBody(request);
+      if (!limitedRequest) return Response.json({ ok: false, error: "request_body_too_large" }, { status: 413, headers: { "cache-control": "no-store" } });
+      request = limitedRequest;
+    } catch {
+      return Response.json({ ok: false, error: "invalid_request_body" }, { status: 400, headers: { "cache-control": "no-store" } });
+    }
 
     if (request.method === "GET" && url.pathname === "/health") {
       const requestId = crypto.randomUUID();
@@ -64,8 +91,9 @@ export default {
         requestId,
         checks: {
           database: readiness.database.status,
-          securityControl: readiness.securityControl.status,
-          authentication: readiness.authentication.status
+          authentication: readiness.authentication.status,
+          bootstrapAuthentication: readiness.bootstrapAuthentication.status,
+          emergencyLock: readiness.emergencyLock.status
         }
       }, {
         status: readiness.ok ? 200 : 503,
@@ -76,6 +104,11 @@ export default {
     // Static diagnostics shell stays available during Emergency Lock; its APIs remain authenticated.
     if (request.method === "GET" && url.pathname === "/owner/labs") {
       return ownerLabsResponse();
+    }
+
+    // Static user portal preview contains sample data only; account data remains behind authenticated APIs.
+    if ((url.pathname === "/user" || url.pathname === "/user/") && request.method === "GET") {
+      return userDashboardResponse();
     }
 
     if (!env.DB && url.pathname.startsWith("/internal/")) {
@@ -171,7 +204,14 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     }
 
     if (url.pathname === "/owner" && request.method === "GET") {
-      return ownerDashboardResponse();
+      const response = ownerDashboardResponse();
+      response.headers.set("content-security-policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'; object-src 'none'");
+      response.headers.set("x-frame-options", "DENY");
+      response.headers.set("x-content-type-options", "nosniff");
+      response.headers.set("referrer-policy", "strict-origin-when-cross-origin");
+      response.headers.set("permissions-policy", "camera=(), microphone=(), geolocation=()");
+      response.headers.set("cache-control", "no-store");
+      return response;
     }
 
     if (env.DB && (
@@ -378,7 +418,9 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     const userApi = new UserApi(userService);
     const deviceApi = new DeviceApi(deviceService);
     const templateApi = new TemplateApi(templateService);
-    const configApi = new ConfigApi(configService);
+    const configApi = new ConfigApi(configService, env.DB!);
+    const configGeneratorApi = new ConfigGeneratorApi(configService, templateService, subscriptionService);
+    const configCompatibilityApi = new ConfigCompatibilityApi(configService);
     const configReleaseService = new ConfigReleaseService(
       configRepository,
       new D1ConfigReleaseRepository(env.DB!),
@@ -386,7 +428,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       new D1AuditRepository(env.DB!)
     );
     const configReleaseApi = new ConfigReleaseApi(configReleaseService);
-    const subscriptionApi = new SubscriptionApi(subscriptionService);
+    const subscriptionApi = new SubscriptionApi(subscriptionService, env.DB!);
     const subscriptionDiagnosticsApi = new SubscriptionDiagnosticsApi(
       new SubscriptionDiagnosticsService(subscriptionRepository, configRepository)
     );
@@ -428,7 +470,18 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     if (templateStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return templateApi.updateStatus(context, decodeURIComponent(templateStatusMatch[1]), body);
+      return templateApi.updateStatus(context, decodePathSegment(templateStatusMatch[1]), body);
+    }
+
+    if (url.pathname === "/internal/config-generator" && request.method === "POST") {
+      let body: unknown;
+      try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
+      return configGeneratorApi.generate(context, body);
+    }
+
+    const configCompatibilityMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/compatibility$/);
+    if (configCompatibilityMatch && request.method === "GET") {
+      return configCompatibilityApi.get(context, decodePathSegment(configCompatibilityMatch[1]), url.searchParams);
     }
 
     if (url.pathname === "/internal/configs" && request.method === "GET") {
@@ -441,11 +494,11 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     }
 
     const configMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)$/);
-    if (configMatch && request.method === "GET") return configApi.get(context, decodeURIComponent(configMatch[1]));
+    if (configMatch && request.method === "GET") return configApi.get(context, decodePathSegment(configMatch[1]));
 
     const configReleaseListMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/releases$/);
     if (configReleaseListMatch && request.method === "GET") {
-      return configReleaseApi.list(context, decodeURIComponent(configReleaseListMatch[1]));
+      return configReleaseApi.list(context, decodePathSegment(configReleaseListMatch[1]));
     }
 
     const configReleasePublishMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/releases\/publish$/);
@@ -453,7 +506,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       const version = body && typeof body === "object" ? Number((body as Record<string, unknown>).version) : NaN;
-      return configReleaseApi.publish(context, decodeURIComponent(configReleasePublishMatch[1]), version);
+      return configReleaseApi.publish(context, decodePathSegment(configReleasePublishMatch[1]), version);
     }
 
     const configReleaseRollbackMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/releases\/rollback$/);
@@ -461,14 +514,14 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
       const version = body && typeof body === "object" ? Number((body as Record<string, unknown>).version) : NaN;
-      return configReleaseApi.rollback(context, decodeURIComponent(configReleaseRollbackMatch[1]), version);
+      return configReleaseApi.rollback(context, decodePathSegment(configReleaseRollbackMatch[1]), version);
     }
 
     const configStatusMatch = url.pathname.match(/^\/internal\/configs\/([^/]+)\/status$/);
     if (configStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return configApi.updateStatus(context, decodeURIComponent(configStatusMatch[1]), body);
+      return configApi.updateStatus(context, decodePathSegment(configStatusMatch[1]), body);
     }
 
     if (url.pathname === "/internal/subscriptions" && request.method === "GET") {
@@ -482,32 +535,32 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
 
     const subscriptionDiagnosticsMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/diagnostics$/);
     if (subscriptionDiagnosticsMatch && request.method === "GET") {
-      return subscriptionDiagnosticsApi.get(context, decodeURIComponent(subscriptionDiagnosticsMatch[1]));
+      return subscriptionDiagnosticsApi.get(context, decodePathSegment(subscriptionDiagnosticsMatch[1]));
     }
 
     const subscriptionTokenRotateMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/token\/rotate$/);
     if (subscriptionTokenRotateMatch && request.method === "POST") {
-      return subscriptionApi.rotateToken(context, decodeURIComponent(subscriptionTokenRotateMatch[1]));
+      return subscriptionApi.rotateToken(context, decodePathSegment(subscriptionTokenRotateMatch[1]));
     }
 
     const subscriptionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)$/);
-    if (subscriptionMatch && request.method === "GET") return subscriptionApi.get(context, decodeURIComponent(subscriptionMatch[1]));
+    if (subscriptionMatch && request.method === "GET") return subscriptionApi.get(context, decodePathSegment(subscriptionMatch[1]));
 
     const subscriptionProvisionMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/provision$/);
     if (subscriptionProvisionMatch && request.method === "POST") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return subscriptionApi.provision(context, decodeURIComponent(subscriptionProvisionMatch[1]), body);
+      return subscriptionApi.provision(context, decodePathSegment(subscriptionProvisionMatch[1]), body);
     }
 
     const subscriptionRebuildMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/rebuild$/);
-    if (subscriptionRebuildMatch && request.method === "POST") return subscriptionApi.rebuild(context, decodeURIComponent(subscriptionRebuildMatch[1]));
+    if (subscriptionRebuildMatch && request.method === "POST") return subscriptionApi.rebuild(context, decodePathSegment(subscriptionRebuildMatch[1]));
 
     const subscriptionStatusMatch = url.pathname.match(/^\/internal\/subscriptions\/([^/]+)\/status$/);
     if (subscriptionStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return subscriptionApi.updateStatus(context, decodeURIComponent(subscriptionStatusMatch[1]), body);
+      return subscriptionApi.updateStatus(context, decodePathSegment(subscriptionStatusMatch[1]), body);
     }
 
     if (url.pathname === "/internal/users" && request.method === "GET") return userApi.list(context);
@@ -521,11 +574,11 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     if (userStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return userApi.updateStatus(context, decodeURIComponent(userStatusMatch[1]), body);
+      return userApi.updateStatus(context, decodePathSegment(userStatusMatch[1]), body);
     }
 
     const userDevicesMatch = url.pathname.match(/^\/internal\/users\/([^/]+)\/devices$/);
-    if (userDevicesMatch && request.method === "GET") return deviceApi.list(context, decodeURIComponent(userDevicesMatch[1]));
+    if (userDevicesMatch && request.method === "GET") return deviceApi.list(context, decodePathSegment(userDevicesMatch[1]));
 
     if (url.pathname === "/internal/devices" && request.method === "POST") {
       let body: unknown;
@@ -537,7 +590,7 @@ document.getElementById("f").addEventListener("submit",async(e)=>{
     if (deviceStatusMatch && request.method === "PATCH") {
       let body: unknown;
       try { body = await request.json(); } catch { return Response.json({ ok: false, error: "invalid_json" }, { status: 400 }); }
-      return deviceApi.updateStatus(context, decodeURIComponent(deviceStatusMatch[1]), body);
+      return deviceApi.updateStatus(context, decodePathSegment(deviceStatusMatch[1]), body);
     }
 
     return Response.json({ ok: false, error: "not_found" }, { status: 404 });

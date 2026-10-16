@@ -104,6 +104,114 @@ describe("v1 systems API authorization", () => {
     expect(response.status).toBe(400);
   });
 
+
+  it("ranks only fresh persisted route health evidence and never mutates routing", async () => {
+    const measuredAt = new Date().toISOString();
+    let query = "";
+    let bound: unknown[] = [];
+    const db = {
+      prepare(sql: string) {
+        query = sql;
+        return {
+          bind(...values: unknown[]) { bound = values; return this; },
+          async all() {
+            return { results: [{
+              id: "route-fast",
+              compatible: 1,
+              healthy: 1,
+              latency_ms: 35,
+              error_rate: 0.01,
+              sample_count: 4,
+              measured_at: measuredAt
+            }] };
+          }
+        };
+      }
+    } as unknown as D1Database;
+    const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
+    const response = await api.routeAdvisor(context("OWNER", "owner-1"), { DB: db } as Env);
+    const body = await response.json() as { value: { decision: string; source: string; candidates: Array<{ id: string; score: number | null }> } };
+    expect(response.status).toBe(200);
+    expect(body.value.decision).toBe("recommendation");
+    expect(body.value.source).toBe("d1_route_health_samples");
+    expect(body.value.candidates[0].id).toBe("route-fast");
+    expect(body.value.candidates[0].score).not.toBeNull();
+    expect(query).toContain("route_health_samples");
+    expect(query).toContain("LIMIT 50");
+    expect(bound).toHaveLength(2);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("fails closed when the Route Advisor schema is not available", async () => {
+    const db = {
+      prepare() {
+        return {
+          bind() { return this; },
+          async all() { throw new Error("no such table: route_candidates"); }
+        };
+      }
+    } as unknown as D1Database;
+    const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
+    const response = await api.routeAdvisor(context("OWNER", "owner-1"), { DB: db } as Env);
+    const body = await response.json() as { error: string; value: { decision: string; candidates: unknown[] } };
+    expect(response.status).toBe(503);
+    expect(body.error).toBe("route_candidate_model_unavailable");
+    expect(body.value.decision).toBe("insufficient_data");
+    expect(body.value.candidates).toEqual([]);
+  });
+
+
+  it("returns a bounded non-sensitive history summary for real operation timings", async () => {
+    const db = {
+      prepare(sql: string) {
+        return {
+          bind() { return this; },
+          async first() { return { ok: 1 }; },
+          async all() {
+            if (sql.includes("operation_timing_samples")) {
+              return { results: [
+                { operation: "config_generate", measured_at: "2026-10-09T12:02:00.000Z", duration_ms: 12 },
+                { operation: "config_generate", measured_at: "2026-10-09T12:01:00.000Z", duration_ms: 10 },
+                { operation: "subscription_provision", measured_at: "2026-10-09T12:00:00.000Z", duration_ms: 20 }
+              ] };
+            }
+            return { results: [] };
+          }
+        };
+      }
+    } as unknown as D1Database;
+    const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
+    const response = await api.speed(context("OWNER", "owner-1"), { DB: db } as Env);
+    const body = await response.json() as { value: { timingHistory: { status: string; sampleCount: number; limit: number; operations: Array<{ operation: string; count: number; averageDurationMs: number }> } } };
+    expect(response.status).toBe(200);
+    expect(body.value.timingHistory.status).toBe("available");
+    expect(body.value.timingHistory.sampleCount).toBe(3);
+    expect(body.value.timingHistory.limit).toBe(100);
+    expect(body.value.timingHistory.operations.find(x => x.operation === "config_generate")?.averageDurationMs).toBe(11);
+    expect(JSON.stringify(body)).not.toContain("owner-1");
+  });
+
+  it("keeps Speed Lab available when historical telemetry has not been migrated", async () => {
+    const db = {
+      prepare(sql: string) {
+        return {
+          bind() { return this; },
+          async first() { return { ok: 1 }; },
+          async all() {
+            if (sql.includes("operation_timing_samples")) throw new Error("no such table");
+            return { results: [] };
+          }
+        };
+      }
+    } as unknown as D1Database;
+    const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
+    const response = await api.speed(context("OWNER", "owner-1"), { DB: db } as Env);
+    const body = await response.json() as { value: { timingHistory: { status: string; sampleCount: number } } };
+    expect(response.status).toBe(200);
+    expect(body.value.timingHistory.status).toBe("unavailable");
+    expect(body.value.timingHistory.sampleCount).toBe(0);
+  });
+
   it("returns insufficient data rather than inventing routes", async () => {
     const api = new V1SystemsApi({} as ConfigRepository, {} as SubscriptionRepository);
     const response = await api.routeAdvisor(context("OWNER", "owner-1"), {} as Env);

@@ -5,6 +5,7 @@ export type SubscriptionStatus = "ACTIVE" | "EXPIRED" | "REVOKED";
 export interface Subscription {
   id: ID;
   userId: ID;
+  name?: string;
   status: SubscriptionStatus;
   expiresAt?: ISODateString;
   /** Internal storage only; never expose this hash to API clients. */

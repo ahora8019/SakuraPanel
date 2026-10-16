@@ -38,6 +38,7 @@ jobs:
 
       - name: Validate preview-only configuration
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PREVIEW_D1_DATABASE_ID: ${{ secrets.PREVIEW_D1_DATABASE_ID }}
           PREVIEW_SECURITY_KV_ID: ${{ secrets.PREVIEW_SECURITY_KV_ID }}
           PREVIEW_AUTH_SECRET: ${{ secrets.PREVIEW_AUTH_SECRET }}
@@ -46,6 +47,7 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           const required = [
+            "CLOUDFLARE_API_TOKEN",
             "PREVIEW_D1_DATABASE_ID",
             "PREVIEW_SECURITY_KV_ID",
             "PREVIEW_AUTH_SECRET",
@@ -67,12 +69,16 @@ jobs:
             console.error("PREVIEW_WORKER_URL must be an HTTPS workers.dev preview URL.");
             process.exit(1);
           }
-          if (process.env.PREVIEW_D1_DATABASE_ID === "db7c0fc3-7e65-49c7-8005-a23fd9adbbfb") {
-            console.error("Preview D1 must not use the production database.");
+          if (process.env.PREVIEW_D1_DATABASE_ID !== "6c6916e8-37b3-4d2c-bd9b-2de0015fb904") {
+            console.error("Preview D1 ID does not match the provisioned isolated preview database.");
             process.exit(1);
           }
-          if (process.env.PREVIEW_SECURITY_KV_ID === "fdc01356fa8d48a8bbd375edc113441a") {
-            console.error("Preview SECURITY_KV must not use the production namespace.");
+          if (process.env.PREVIEW_SECURITY_KV_ID !== "1d211a09497940c286a3941182e8fe7d") {
+            console.error("Preview SECURITY_KV ID does not match the provisioned isolated preview namespace.");
+            process.exit(1);
+          }
+          if (process.env.PREVIEW_WORKER_URL !== "https://sakurapanel-preview.ronintrb.workers.dev") {
+            console.error("PREVIEW_WORKER_URL must target the dedicated SakuraPanel preview Worker.");
             process.exit(1);
           }
           if (process.env.PREVIEW_AUTH_SECRET.length < 32) {
@@ -98,7 +104,7 @@ jobs:
             compatibility_date: "2026-10-06",
             workers_dev: true,
             observability: { enabled: true, logs: { enabled: true, head_sampling_rate: 1 }, traces: { enabled: true, head_sampling_rate: 0.1 } },
-            d1_databases: [{ binding: "DB", database_name: "sakurapanel-preview", database_id: process.env.PREVIEW_D1_DATABASE_ID, migrations_dir: "migrations" }],
+            d1_databases: [{ binding: "DB", database_name: "sakurapanel-preview-db", database_id: process.env.PREVIEW_D1_DATABASE_ID, migrations_dir: "migrations" }],
             kv_namespaces: [{ binding: "SECURITY_KV", id: process.env.PREVIEW_SECURITY_KV_ID }]
           };
           writeFileSync("wrangler.preview.jsonc", JSON.stringify(config, null, 2) + "\n", { mode: 0o600 });
@@ -108,7 +114,7 @@ jobs:
         uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: d1 migrations apply sakurapanel-preview --remote --config wrangler.preview.jsonc
+          command: d1 migrations apply sakurapanel-preview-db --remote --config wrangler.preview.jsonc
 
       - name: Set independent preview secrets
         env:
